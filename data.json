@@ -1,0 +1,39 @@
+{
+  "threat_levels": [
+    "Zayin",
+    "Teth",
+    "He",
+    "Waw",
+    "Aleph"
+  ],
+  "threat_clocks": {
+    "Zayin": 4,
+    "Teth": 6,
+    "He": 8,
+    "Waw": 12,
+    "Aleph": 16
+  },
+  "ranks": [
+    "Agent",
+    "Captain, Information",
+    "Captain, Training",
+    "Captain, Safety",
+    "Captain, Control",
+    "Captain, Disciplinary"
+  ],
+  "traumas": [
+    "Cold",
+    "Haunted",
+    "Obsessed",
+    "Paranoid",
+    "Reckless",
+    "Soft",
+    "Unstable",
+    "Vicious"
+  ],
+  "ego_types": [
+    "Weapon",
+    "Suit",
+    "Gift"
+  ]
+}
