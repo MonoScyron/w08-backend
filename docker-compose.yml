@@ -1,4 +1,5 @@
 version: '3'
+
 services:
   postgres:
     image: postgres:latest
@@ -16,12 +17,12 @@ services:
     build: .
     ports:
       - "5000:5000"
-    env_file:
-      - .env
     volumes:
       - ./src:/src
     depends_on:
       - postgres
+    environment:
+      SQLALCHEMY_DATABASE_URI: "postgresql://postgres:postgres@postgres:5432/db"
     networks:
       - postgres_network
 

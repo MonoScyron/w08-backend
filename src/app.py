@@ -1,25 +1,28 @@
 import json
+import os
 
 from typing import Union
 from flask import Flask, request
-from flask_migrate import Migrate, upgrade, migrate
+from flask_migrate import Migrate
+
 from db import db
 from db import Department, Abnormality, Agent, Project, Ability, Harm, Ego, Clock, Tile
 
 app = Flask(__name__)
-db_filename = "db"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:postgres@postgres:5432/" + db_filename
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("SQLALCHEMY_DATABASE_URI")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ECHO"] = True
 
-mig = Migrate(app, db)
 db.init_app(app)
-with app.app_context():
-    db.create_all()
-    mig.migrate()
-    mig.upgrade()
+mig = Migrate(app, db)
 
+with app.app_context():
+    mig.init_app(app)
+    db.create_all()
+
+
+# * Generic responses
 
 def success_response(data: Union[str, dict], code=200):
     """
@@ -40,6 +43,8 @@ def failure_response(message: str, code=404):
     """
     return json.dumps({"error": message}), code
 
+
+# * Routes
 
 @app.route("/")
 def hello_world():

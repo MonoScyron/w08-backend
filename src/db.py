@@ -1,11 +1,14 @@
 import json
+import os
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, ForeignKey, String, Boolean, Enum, CheckConstraint, Text, Table
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import validates, relationship
 
-with open('./data.json', 'r') as file:
+parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_json_path = os.path.join(parent_directory, 'data.json')
+with open(data_json_path, 'r') as file:
     data = json.load(file)
     threat_levels_enum = data.get('threat_levels')
     ranks_enum = data.get('ranks')
@@ -52,8 +55,9 @@ class Facility(Base):
 
     # Columns
     available_PE = Column(Integer, default=0, nullable=False)
+    available_rabbits = Column(Integer, default=0, nullable=False)
     day = Column(Integer, nullable=False)
-    shift = Column(Integer, CheckConstraint('alert_level >= 0 AND alert_level <= 2'), nullable=False)
+    shift = Column(Integer, CheckConstraint('shift >= 0 AND shift <= 2'), nullable=False)
     alert_level = Column(Integer, CheckConstraint('alert_level >= 0 AND alert_level <= 3'), default=0, nullable=False)
 
 
@@ -72,7 +76,7 @@ class Department(Base):
 
     # Columns
     name = Column(String, nullable=False)
-    buffs = Column(ARRAY(String), default=[], nullable=True)  # ! Should be array
+    buffs = Column(ARRAY(String), default=[], nullable=True)
     """Department wide buffs for assigned agents"""
     rabbited = Column(Boolean, default=False, nullable=False)
     """If true, department is locked by rabbit protocol."""
@@ -123,12 +127,12 @@ class Abnormality(Base):
         'management_show >= 0 AND management_show <= array_length(management_notes, 1)'), default=0,
                              nullable=False)
     """Show management notes up to and including this number. Must be less than or equal to len(management_notes)."""
-    management_notes = Column(ARRAY(Text), default=[], nullable=False)  # ! Should be array
+    management_notes = Column(ARRAY(Text), default=[], nullable=False)
     story_show = Column(Integer, CheckConstraint('story_show >= 0 AND story_show <= array_length(stories, 1)'),
                         default=0,
                         nullable=False)
     """Show story up to and including this number. Must be less than or equal to len(stories)."""
-    stories = Column(ARRAY(Text), default=[], nullable=False)  # ! Should be array
+    stories = Column(ARRAY(Text), default=[], nullable=False)
 
     clock_1 = Column(Integer, default=0, nullable=False)
     """
@@ -212,7 +216,7 @@ class Agent(Base):
                 raise ValueError("For 'rank'=Captain agents, 'stress' must be between 0 and 8")
         return value
 
-    traumas = Column(Enum(*traumas_enum, name='traumas_enum'), default=[], nullable=False)  # ! Should be array
+    traumas = Column(Enum(*traumas_enum, name='traumas_enum'), default=[], nullable=False)
 
     @validates('traumas')
     def validates_traumas(self, key, value):
@@ -351,6 +355,10 @@ class Ego(Base):
     grade = Column(Enum(*threat_levels_enum, name='threat_levels_enum'), nullable=False)
     effect = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    max_extracted = Column(Integer,
+                           CheckConstraint("max_extracted IS NULL OR type != 'Gift'"),
+                           nullable=True)
+    """Maximum amount of ego that can be extracted. Should be Null if type="Gift"."""
 
 
 class Clock(Base):
