@@ -4,7 +4,6 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Column, Integer, ForeignKey, String, Boolean, Enum, CheckConstraint, Text, Table
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import validates, relationship
-from sqlalchemy.ext.declarative import declarative_base
 
 with open('./data.json', 'r') as file:
     data = json.load(file)
@@ -18,7 +17,7 @@ with open('./data.json', 'r') as file:
 
 db = SQLAlchemy()
 
-Base = db.Model  # declarative_base()
+Base = db.Model
 
 # Junction tables
 project_department_association = Table(
@@ -41,6 +40,21 @@ agent_ability_association = Table(
     Column('ability_id', Integer, ForeignKey('abilities.id'), nullable=False)
 )
 """Junction table for agents and abilities"""
+
+
+class Facility(Base):
+    """
+    Global data
+    """
+    __tablename__ = 'facilities'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Columns
+    available_PE = Column(Integer, default=0, nullable=False)
+    day = Column(Integer, nullable=False)
+    shift = Column(Integer, CheckConstraint('alert_level >= 0 AND alert_level <= 2'), nullable=False)
+    alert_level = Column(Integer, CheckConstraint('alert_level >= 0 AND alert_level <= 3'), default=0, nullable=False)
 
 
 class Department(Base):

@@ -11,8 +11,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - my_network
-  w-08:
+      - postgres_network
+  web:
     build: .
     ports:
       - "5000:5000"
@@ -23,10 +23,12 @@ services:
     depends_on:
       - postgres
     networks:
-      - my_network
+      - postgres_network
+
 volumes:
   postgres_data:
     driver: local
+
 networks:
-  my_network:
+  postgres_network:
     driver: bridge
