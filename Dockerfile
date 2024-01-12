@@ -16,6 +16,4 @@ COPY . .
 
 EXPOSE 5000
 
-ENV FLASK_APP=/app/src/app.py
-
 CMD ["dockerize", "-wait", "tcp://postgres:5432", "-timeout", "30s", "bash", "run.sh"]

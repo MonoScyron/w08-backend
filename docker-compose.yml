@@ -19,10 +19,11 @@ services:
       - "5000:5000"
     volumes:
       - ./src:/src
+      - ./migrations:/app/migrations
     depends_on:
       - postgres
-    environment:
-      SQLALCHEMY_DATABASE_URI: "postgresql://postgres:postgres@postgres:5432/db"
+    env_file:
+      - .env
     networks:
       - postgres_network
 
