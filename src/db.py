@@ -57,8 +57,10 @@ class Facility(Base):
     available_PE = Column(Integer, default=0, nullable=False)
     available_rabbits = Column(Integer, default=0, nullable=False)
     day = Column(Integer, nullable=False)
-    shift = Column(Integer, CheckConstraint('shift >= 0 AND shift <= 2'), nullable=False)
-    alert_level = Column(Integer, CheckConstraint('alert_level >= 0 AND alert_level <= 3'), default=0, nullable=False)
+    shift = Column(Integer, CheckConstraint('shift >= 0 AND shift <= 2', name='shift_constraint'), nullable=False)
+    alert_level = Column(Integer,
+                         CheckConstraint('alert_level >= 0 AND alert_level <= 3', name='alert_level_constraint'),
+                         default=0, nullable=False)
 
 
 class Department(Base):
@@ -124,11 +126,13 @@ class Abnormality(Base):
     resists = Column(String, nullable=False)
 
     management_show = Column(Integer, CheckConstraint(
-        'management_show >= 0 AND management_show <= array_length(management_notes, 1)'), default=0,
+        'management_show >= 0 AND management_show <= array_length(management_notes, 1)',
+        name='management_show_constraint'), default=0,
                              nullable=False)
     """Show management notes up to and including this number. Must be less than or equal to len(management_notes)."""
     management_notes = Column(ARRAY(Text), default=[], nullable=False)
-    story_show = Column(Integer, CheckConstraint('story_show >= 0 AND story_show <= array_length(stories, 1)'),
+    story_show = Column(Integer, CheckConstraint('story_show >= 0 AND story_show <= array_length(stories, 1)',
+                                                 name='story_show_constraint'),
                         default=0,
                         nullable=False)
     """Show story up to and including this number. Must be less than or equal to len(stories)."""
@@ -197,10 +201,13 @@ class Agent(Base):
     character_notes = Column(Text, nullable=True)
     rank = Column(Enum(*ranks_enum, name='rank_enum'), nullable=False)
 
-    physical_heal = Column(Integer, CheckConstraint('physical_heal >= 0 AND physical_heal <= 4'), default=0,
+    physical_heal = Column(Integer, CheckConstraint('physical_heal >= 0 AND physical_heal <= 4',
+                                                    name='physical_heal_constraint'), default=0,
                            nullable=False)
     """Current count of physical healing clock. Value=[0...4]."""
-    mental_heal = Column(Integer, CheckConstraint('mental_heal >= 0 AND mental_heal <= 4'), default=0, nullable=False)
+    mental_heal = Column(Integer,
+                         CheckConstraint('mental_heal >= 0 AND mental_heal <= 4', name='mental_heal_constraint'),
+                         default=0, nullable=False)
     """Current count of mental healing clock. Value=[0...4]."""
 
     stress = Column(Integer, default=0, nullable=False)
@@ -233,52 +240,75 @@ class Agent(Base):
     agent_exp = Column(Integer, default=0, nullable=False)
     """Available ability clock and ego gift clock exp"""
 
-    fortitude = Column(Integer, CheckConstraint('fortitude >= 0 AND fortitude <= 5'), default=0, nullable=False)
+    fortitude = Column(Integer, CheckConstraint('fortitude >= 0 AND fortitude <= 5', name='fortitude_constraint'),
+                       default=0, nullable=False)
     """Fortitude level. Value=[0...5]."""
-    prudence = Column(Integer, CheckConstraint('prudence >= 0 AND prudence <= 5'), default=0, nullable=False)
+    prudence = Column(Integer, CheckConstraint('prudence >= 0 AND prudence <= 5', name='prudence_constraint'),
+                      default=0, nullable=False)
     """Prudence level. Value=[0...5]."""
-    temperance = Column(Integer, CheckConstraint('temperance >= 0 AND temperance <= 5'), default=0, nullable=False)
+    temperance = Column(Integer, CheckConstraint('temperance >= 0 AND temperance <= 5', name='temperance_constraint'),
+                        default=0, nullable=False)
     """Temperance level. Value=[0...5]."""
-    justice = Column(Integer, CheckConstraint('justice >= 0 AND justice <= 5'), default=0, nullable=False)
+    justice = Column(Integer, CheckConstraint('justice >= 0 AND justice <= 5', name='justice_constraint'), default=0,
+                     nullable=False)
     """Justice level. Value=[0...5]."""
 
-    fortitude_tick = Column(Integer, CheckConstraint('fortitude_tick >= 0 AND fortitude_tick <= 6'), default=0,
+    fortitude_tick = Column(Integer, CheckConstraint('fortitude_tick >= 0 AND fortitude_tick <= 6',
+                                                     name='fortitude_tick_constraint'), default=0,
                             nullable=False)
     """Fortitude clock count. Value=[0...6]."""
-    prudence_tick = Column(Integer, CheckConstraint('prudence_tick >= 0 AND prudence_tick <= 6'), default=0,
+    prudence_tick = Column(Integer, CheckConstraint('prudence_tick >= 0 AND prudence_tick <= 6',
+                                                    name='prudence_tick_constraint'), default=0,
                            nullable=False)
     """Prudence clock count. Value=[0...6]."""
-    temperance_tick = Column(Integer, CheckConstraint('temperance_tick >= 0 AND temperance_tick <= 6'), default=0,
+    temperance_tick = Column(Integer, CheckConstraint('temperance_tick >= 0 AND temperance_tick <= 6',
+                                                      name='temperance_tick_constraint'), default=0,
                              nullable=False)
     """Temperance clock count. Value=[0...6]."""
-    justice_tick = Column(Integer, CheckConstraint('justice_tick >= 0 AND justice_tick <= 6'), default=0,
+    justice_tick = Column(Integer,
+                          CheckConstraint('justice_tick >= 0 AND justice_tick <= 6', name='justice_tick_constraint'),
+                          default=0,
                           nullable=False)
     """Justice clock count. Value=[0...6]."""
 
     ability_tick = Column(Integer, default=0, nullable=False)
     """Ability clock count. Value=[0...8]."""
 
-    force_lvl = Column(Integer, CheckConstraint('force_lvl >= 0 AND force_lvl <= 4'), default=0, nullable=False)
+    force_lvl = Column(Integer, CheckConstraint('force_lvl >= 0 AND force_lvl <= 4', name='force_lvl_constraint'),
+                       default=0, nullable=False)
     """Level of force action. Note: Fortitude. Value=[0...4]."""
-    endure_lvl = Column(Integer, CheckConstraint('endure_lvl >= 0 AND endure_lvl <= 4'), default=0, nullable=False)
+    endure_lvl = Column(Integer, CheckConstraint('endure_lvl >= 0 AND endure_lvl <= 4', name='endure_lvl_constraint'),
+                        default=0, nullable=False)
     """Level of endure action. Note: Fortitude + Prudence. Value=[0...4]."""
-    lurk_lvl = Column(Integer, CheckConstraint('lurk_lvl >= 0 AND lurk_lvl <= 4'), default=0, nullable=False)
+    lurk_lvl = Column(Integer, CheckConstraint('lurk_lvl >= 0 AND lurk_lvl <= 4', name='lurk_lvl_constraint'),
+                      default=0, nullable=False)
     """Level of lurk action. Note: Fortitude + Temperance. Value=[0...4]."""
-    rush_lvl = Column(Integer, CheckConstraint('rush_lvl >= 0 AND rush_lvl <= 4'), default=0, nullable=False)
+    rush_lvl = Column(Integer, CheckConstraint('rush_lvl >= 0 AND rush_lvl <= 4', name='rush_lvl_constraint'),
+                      default=0, nullable=False)
     """Level of rush action. Note: Fortitude + Justice. Value=[0...4]."""
-    observe_lvl = Column(Integer, CheckConstraint('observe_lvl >= 0 AND observe_lvl <= 4'), default=0, nullable=False)
+    observe_lvl = Column(Integer,
+                         CheckConstraint('observe_lvl >= 0 AND observe_lvl <= 4', name='observe_lvl_constraint'),
+                         default=0, nullable=False)
     """Level of observe action. Note: Prudence. Value=[0...4]."""
-    consort_lvl = Column(Integer, CheckConstraint('consort_lvl >= 0 AND consort_lvl <= 4'), default=0, nullable=False)
+    consort_lvl = Column(Integer,
+                         CheckConstraint('consort_lvl >= 0 AND consort_lvl <= 4', name='consort_lvl_constraint'),
+                         default=0, nullable=False)
     """Level of consort action. Note: Prudence + Temperance. Value=[0...4]."""
-    shoot_lvl = Column(Integer, CheckConstraint('shoot_lvl >= 0 AND shoot_lvl <= 4'), default=0, nullable=False)
+    shoot_lvl = Column(Integer, CheckConstraint('shoot_lvl >= 0 AND shoot_lvl <= 4', name='shoot_lvl_constraint'),
+                       default=0, nullable=False)
     """Level of shoot action. Note: Prudence + Justice. Value=[0...4]."""
-    protocol_lvl = Column(Integer, CheckConstraint('protocol_lvl >= 0 AND protocol_lvl <= 4'), default=0,
+    protocol_lvl = Column(Integer,
+                          CheckConstraint('protocol_lvl >= 0 AND protocol_lvl <= 4', name='protocol_lvl_constraint'),
+                          default=0,
                           nullable=False)
     """Level of protocol action. Note: Temperance. Value=[0...4]."""
-    discipline_lvl = Column(Integer, CheckConstraint('discipline_lvl >= 0 AND discipline_lvl <= 4'), default=0,
+    discipline_lvl = Column(Integer, CheckConstraint('discipline_lvl >= 0 AND discipline_lvl <= 4',
+                                                     name='discipline_lvl_constraint'), default=0,
                             nullable=False)
     """Level of discipline action. Note: Temperance + Justice. Value=[0...4]."""
-    skirmish_lvl = Column(Integer, CheckConstraint('skirmish_lvl >= 0 AND skirmish_lvl <= 4'), default=0,
+    skirmish_lvl = Column(Integer,
+                          CheckConstraint('skirmish_lvl >= 0 AND skirmish_lvl <= 4', name='skirmish_lvl_constraint'),
+                          default=0,
                           nullable=False)
     """Level of skirmish action. Note: Justice. Value=[0...4]."""
 
@@ -297,7 +327,9 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     max_clock = Column(Integer, nullable=False)
-    curr_tick = Column(Integer, CheckConstraint('curr_tick >= 0 AND curr_tick <= max_clock'), default=0, nullable=False)
+    curr_tick = Column(Integer,
+                       CheckConstraint('curr_tick >= 0 AND curr_tick <= max_clock', name='curr_tick_constraint'),
+                       default=0, nullable=False)
     """Must be less than or equal to max_clock"""
 
 
@@ -328,7 +360,7 @@ class Harm(Base):
     agent = relationship('Agent', back_populates='harms')
 
     # Columns
-    level = Column(Integer, CheckConstraint('level >= 0 AND level <= 3'), nullable=False)
+    level = Column(Integer, CheckConstraint('level >= 0 AND level <= 3', name='level_constraint'), nullable=False)
     """Value=[0...3]"""
     is_physical = Column(Boolean, nullable=False)
     """True if harm is physical, False if harm is mental."""
@@ -356,7 +388,7 @@ class Ego(Base):
     effect = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     max_extracted = Column(Integer,
-                           CheckConstraint("max_extracted IS NULL OR type != 'Gift'"),
+                           CheckConstraint("max_extracted IS NULL OR type != 'Gift'", name='max_extracted_constraint'),
                            nullable=True)
     """Maximum amount of ego that can be extracted. Should be Null if type="Gift"."""
 
@@ -383,7 +415,8 @@ class Clock(Base):
 
     # Columns
     max_count = Column(Integer, nullable=False)
-    tick_count = Column(Integer, CheckConstraint('tick_count < max_count'), nullable=False)
+    tick_count = Column(Integer, CheckConstraint('tick_count < max_count', name='tick_count_constraint'),
+                        nullable=False)
     """Must be less than or equal to max_count"""
     important = Column(Boolean, default=False, nullable=False)
 
@@ -401,12 +434,13 @@ class Tile(Base):
     abnormalities = relationship('Abnormality', back_populates='tile')
     agents = relationship('Agent', back_populates='tile')
 
-    y = Column(Integer, CheckConstraint('y >= 0 AND y <= 15'), nullable=False)
-    x = Column(Integer, CheckConstraint('x >= 0 AND x <= 27'), nullable=False)
+    y = Column(Integer, CheckConstraint('y >= 0 AND y <= 15', name='y_constraint'), nullable=False)
+    x = Column(Integer, CheckConstraint('x >= 0 AND x <= 27', name='x_constraint'), nullable=False)
     can_place_containment = Column(Boolean, nullable=False)
 
     is_containment_unit = Column(Boolean,
-                                 CheckConstraint('can_place_containment = TRUE OR is_containment_unit = FALSE'),
+                                 CheckConstraint('can_place_containment = TRUE OR is_containment_unit = FALSE',
+                                                 name='is_containment_unit_constraint'),
                                  nullable=False)
     """Must be False if can_place_containment is False or when abnormalities is null"""
 
