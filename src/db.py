@@ -20,7 +20,15 @@ with open(data_json_path, 'r') as file:
 
 db = SQLAlchemy()
 
-Base = db.Model
+
+class Base(db.Model):
+    __abstract__ = True
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    def simple_serialize(self):
+        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+
 
 # Junction tables
 project_department_association = Table(
@@ -51,8 +59,6 @@ class Facility(Base):
     """
     __tablename__ = 'facilities'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-
     # Columns
     available_PE = Column(Integer, default=0, nullable=False)
     available_rabbits = Column(Integer, default=0, nullable=False)
@@ -62,6 +68,16 @@ class Facility(Base):
                          CheckConstraint('alert_level >= 0 AND alert_level <= 3', name='alert_level_constraint'),
                          default=0, nullable=False)
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'available_PE': self.available_PE,
+            'available_rabbits': self.available_rabbits,
+            'day': self.day,
+            'shift': self.shift,
+            'alert_level': self.alert_level
+        }
+
 
 class Department(Base):
     """
@@ -69,8 +85,6 @@ class Department(Base):
     Many-to-many with projects (assigned projects)
     """
     __tablename__ = 'departments'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     agents = relationship("Agent", back_populates="department")
@@ -83,6 +97,16 @@ class Department(Base):
     rabbited = Column(Boolean, default=False, nullable=False)
     """If true, department is locked by rabbit protocol."""
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'agents': [agent.simple_serialize() for agent in self.agents],
+            'projects': [project.simple_serialize() for project in self.projects],
+            'buffs': self.buffs,
+            'rabbited': self.rabbited
+        }
+
 
 class Abnormality(Base):
     """
@@ -91,7 +115,6 @@ class Abnormality(Base):
     One-to-many with egos (obtained from)
     """
     __tablename__ = "abnormalities"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     tile_id = Column(Integer(), ForeignKey("tiles.id"), nullable=True)
@@ -166,6 +189,38 @@ class Abnormality(Base):
 
     player_notes = Column(Text, nullable=True)
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'tile_id': self.tile_id,
+            'name': self.name,
+            'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
+            'egos': [ego.simple_serialize() for ego in self.egos] if self.egos else [],
+            'abno_code': self.abno_code,
+            'blurb': self.blurb,
+            'current_status': self.current_status,
+            'threat_level': self.threat_level,
+            'is_breaching': self.is_breaching,
+            'is_working': self.is_working,
+            'description': self.description,
+            'damage_type': self.damage_type,
+            'favored_work': self.favored_work,
+            'disfavored_work': self.disfavored_work,
+            'can_breach': self.can_breach,
+            'weaknesses': self.weaknesses,
+            'resists': self.resists,
+            'management_show': self.management_show,
+            'management_notes': self.management_notes,
+            'story_show': self.story_show,
+            'stories': self.stories,
+            'clock_1': self.clock_1,
+            'clock_2': self.clock_2,
+            'clock_3': self.clock_3,
+            'clock_4': self.clock_4,
+            'clock_4_finished': self.clock_4_finished,
+            'player_notes': self.player_notes
+        }
+
 
 class Agent(Base):
     """
@@ -177,7 +232,6 @@ class Agent(Base):
     One-to-many with harms (obtained harms)
     """
     __tablename__ = "agents"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     tile_id = Column(Integer, ForeignKey('tiles.id'), nullable=True)
@@ -312,13 +366,53 @@ class Agent(Base):
                           nullable=False)
     """Level of skirmish action. Note: Justice. Value=[0...4]."""
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'tile_id': self.tile_id,
+            'name': self.name,
+            'department_id': self.department_id,
+            'egos': [ego.simple_serialize() for ego in self.egos] if self.egos else [],
+            'abilities': [ability.simple_serialize() for ability in self.abilities] if self.abilities else [],
+            'harms': [harm.simple_serialize() for harm in self.harms] if self.harms else [],
+            'abnormality_id': self.abnormality_id,
+            'blurb': self.blurb,
+            'current_status': self.current_status,
+            'character_notes': self.character_notes,
+            'rank': self.rank,
+            'physical_heal': self.physical_heal,
+            'mental_heal': self.mental_heal,
+            'stress': self.stress,
+            'traumas': self.traumas,
+            'is_visible': self.is_visible,
+            'agent_exp': self.agent_exp,
+            'fortitude': self.fortitude,
+            'prudence': self.prudence,
+            'temperance': self.temperance,
+            'justice': self.justice,
+            'fortitude_tick': self.fortitude_tick,
+            'prudence_tick': self.prudence_tick,
+            'temperance_tick': self.temperance_tick,
+            'justice_tick': self.justice_tick,
+            'ability_tick': self.ability_tick,
+            'force_lvl': self.force_lvl,
+            'endure_lvl': self.endure_lvl,
+            'lurk_lvl': self.lurk_lvl,
+            'rush_lvl': self.rush_lvl,
+            'observe_lvl': self.observe_lvl,
+            'consort_lvl': self.consort_lvl,
+            'shoot_lvl': self.shoot_lvl,
+            'protocol_lvl': self.protocol_lvl,
+            'discipline_lvl': self.discipline_lvl,
+            'skirmish_lvl': self.skirmish_lvl
+        }
+
 
 class Project(Base):
     """
     Many-to-many with departments (projects assigned to department)
     """
     __tablename__ = "projects"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     departments = relationship('Department', secondary=project_department_association, back_populates='projects')
@@ -332,13 +426,23 @@ class Project(Base):
                        default=0, nullable=False)
     """Must be less than or equal to max_clock"""
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'departments': [department.simple_serialize() for department in
+                            self.departments] if self.departments else [],
+            'max_clock': self.max_clock,
+            'curr_tick': self.curr_tick
+        }
+
 
 class Ability(Base):
     """
     Many-to-many with agents (obtained abilities)
     """
     __tablename__ = "abilities"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     agents = relationship('Agent', secondary=agent_ability_association, back_populates='abilities')
@@ -347,13 +451,20 @@ class Ability(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else []
+        }
+
 
 class Harm(Base):
     """
     Many-to-one with agents (obtained harms)
     """
     __tablename__ = "harms"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     agent_id = Column(Integer, ForeignKey('agents.id'), nullable=False)
@@ -366,6 +477,15 @@ class Harm(Base):
     """True if harm is physical, False if harm is mental."""
     description = Column(Text, nullable=True)
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'level': self.level,
+            'is_physical': self.is_physical,
+            'description': self.description
+        }
+
 
 class Ego(Base):
     """
@@ -373,7 +493,6 @@ class Ego(Base):
     Many-to-one with abnormalities (obtained from)
     """
     __tablename__ = "egos"
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     agents = relationship('Agent', secondary=agent_ego_association, back_populates='egos')
@@ -392,6 +511,19 @@ class Ego(Base):
                            nullable=True)
     """Maximum amount of ego that can be extracted. Should be Null if type="Gift"."""
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'abnormality_id': self.abnormality_id,
+            'type': self.type,
+            'name': self.name,
+            'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
+            'grade': self.grade,
+            'effect': self.effect,
+            'description': self.description,
+            'max_extracted': self.max_extracted
+        }
+
 
 class Clock(Base):
     """
@@ -400,7 +532,6 @@ class Clock(Base):
     Only one of these relationships will ever be non-null, the other will always be null
     """
     __tablename__ = 'clocks'
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     agent_id = Column(Integer, ForeignKey('agents.id'), nullable=True)
@@ -420,6 +551,16 @@ class Clock(Base):
     """Must be less than or equal to max_count"""
     important = Column(Boolean, default=False, nullable=False)
 
+    def serialize(self):
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'abnormality_id': self.abnormality_id,
+            'max_count': self.max_count,
+            'tick_count': self.tick_count,
+            'important': self.important
+        }
+
 
 class Tile(Base):
     """
@@ -428,7 +569,6 @@ class Tile(Base):
     If is_containment is False, relationship with abnormalities must be Null
     """
     __tablename__ = 'tiles'
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Relationships
     abnormalities = relationship('Abnormality', back_populates='tile')
@@ -464,3 +604,19 @@ class Tile(Base):
         if self.abnormalities is not None or value is None:
             raise ValueError(f'{key} must be NULL when no abnormalities are assigned to tile')
         return value
+
+    def serialize(self):
+        return {
+            'id': self.id,
+            'abnormalities': [abnormality.simple_serialize() for abnormality in
+                              self.abnormalities] if self.abnormalities else [],
+            'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
+            'y': self.y,
+            'x': self.x,
+            'can_place_containment': self.can_place_containment,
+            'is_containment_unit': self.is_containment_unit,
+            'is_working': self.is_working,
+            'meltdown': self.meltdown,
+            'work_type': self.work_type,
+            'engagement_status': self.engagement_status
+        }

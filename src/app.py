@@ -24,7 +24,7 @@ with app.app_context():
 
 # * Generic responses
 
-def success_response(data: Union[str, dict], code=200):
+def success_response(data: Union[str, dict, list], code=200):
     """
     Generalized success response function
     :param data: Data to be wrapped as JSON
@@ -46,12 +46,61 @@ def failure_response(message: str, code=404):
 
 # * Routes
 
-@app.route("/")
+@app.route('/')
 def hello_world():
     """
-    Endpoint for hello world
+    Hello world
     """
     return success_response("Hello world!")
+
+
+@app.route('/v1/departments/', methods=['GET'])
+def get_all_departments():
+    all_departments = Department.query.all()
+    departments = [dep.serialize() for dep in all_departments]
+    return success_response(departments)
+
+
+@app.route('/v1/abnormalities/', methods=['GET'])
+def get_all_abnormalities():
+    all_abnormalities = Abnormality.query.all()
+    abnormalities = [abnormality.serialize() for abnormality in all_abnormalities]
+    return success_response(abnormalities)
+
+
+@app.route('/v1/agents/', methods=['GET'])
+def get_all_agents():
+    all_agents = Agent.query.all()
+    agents = [agent.serialize() for agent in all_agents]
+    return success_response(agents)
+
+
+@app.route('/v1/abilities/', methods=['GET'])
+def get_all_abilities():
+    all_abilities = Ability.query.all()
+    abilities = [ability.serialize() for ability in all_abilities]
+    return success_response(abilities)
+
+
+@app.route('/v1/harms/', methods=['GET'])
+def get_all_harms():
+    all_harms = Harm.query.all()
+    harms = [harm.serialize() for harm in all_harms]
+    return success_response(harms)
+
+
+@app.route('/v1/egos/', methods=['GET'])
+def get_all_egos():
+    all_egos = Ego.query.all()
+    egos = [ego.serialize() for ego in all_egos]
+    return success_response(egos)
+
+
+@app.route('/v1/clocks/', methods=['GET'])
+def get_all_clocks():
+    all_clocks = Clock.query.all()
+    clocks = [clock.serialize() for clock in all_clocks]
+    return success_response(clocks)
 
 
 if __name__ == "__main__":
