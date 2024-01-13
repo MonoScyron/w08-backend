@@ -22,10 +22,11 @@ mig = Migrate(app, db)
 with app.app_context():
     mig.init_app(app)
     db.create_all()
-    
+
 with open(data_json_path, 'r') as file:
     file_data = json.load(file)
     required_fields = file_data.get('required_fields')
+    departments = file_data.get('departments')
 
 
 # * Generic responses
@@ -351,24 +352,36 @@ def delete_clock(clock_id):
 # * Runtime
 
 def facility_setup():
-    try:
-        with app.app_context():
+    with app.app_context():
+        try:
             facility = db.session.query(Facility).all()
             if len(facility) < 1:
                 facility = Facility()
                 db.session.add(facility)
                 db.session.commit()
-    except Exception:
-        db.session.rollback()
-        abort(500, "Failed to setup facility")
+        except Exception:
+            db.session.rollback()
+            abort(500, "Failed to set up facility")
 
 
-def department_setup():
-    # TODO: Check if department table has all Information, Training, Safety, Control, Disciplinary department rows
-    #  If not, create missing rows
-    pass
+def departments_setup():
+    with app.app_context():
+        try:
+            deps = db.session.query(Department).all()
+            if len(deps) != 5:
+                db.session.query(Department).delete()
+
+                for name, dep_id in departments.items():
+                    new_dep = Department(id=dep_id, name=name)
+                    db.session.add(new_dep)
+
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+            abort(500, "Failed to set up departments")
 
 
 if __name__ == "__main__":
     facility_setup()
+    departments_setup()
     app.run(host="0.0.0.0", port=5000, debug=True)

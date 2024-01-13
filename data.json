@@ -1,4 +1,11 @@
 {
+  "departments": {
+    "Control": 0,
+    "Information": 1,
+    "Training": 2,
+    "Safety": 3,
+    "Disciplinary": 4
+  },
   "threat_levels": [
     "Zayin",
     "Teth",

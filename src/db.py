@@ -10,6 +10,7 @@ parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_json_path = os.path.join(parent_directory, 'data.json')
 with open(data_json_path, 'r') as file:
     data = json.load(file)
+    department_names_enum = data.get('departments').keys()
     threat_levels_enum = data.get('threat_levels')
     ranks_enum = data.get('ranks')
     traumas_enum = data.get('traumas')
@@ -64,11 +65,12 @@ abnormality_clock_association = Table(
 """Junction table for abnos and clocks"""
 
 
-class Facility(Base):
+class Facility(db.Model):
     """
     Global data, should only have one row at a time
     """
     __tablename__ = 'facilities'
+    id = Column(Integer, default=1, primary_key=True)
 
     # Columns
     available_PE = Column(Integer, default=0, nullable=False)
@@ -93,19 +95,20 @@ class Facility(Base):
         }
 
 
-class Department(Base):
+class Department(db.Model):
     """
     One-to-many with agents (assigned department)
     Many-to-many with projects (assigned projects)
     """
     __tablename__ = 'departments'
+    id = Column(Integer, primary_key=True)
 
     # Relationships
     agents = relationship("Agent", back_populates="department")
     projects = relationship("Project", secondary=project_department_association, back_populates="departments")
 
     # Columns
-    name = Column(String, nullable=False)
+    name = Column(Enum(*department_names_enum, name='department_names_enum'), nullable=False)
     buffs = Column(ARRAY(String), default=[], nullable=False)
     """Department wide buffs for assigned agents"""
     rabbited = Column(Boolean, default=False, nullable=False)
@@ -199,7 +202,7 @@ class Abnormality(Base):
     """Tick count for research clock 4. Min 0, max value dependent on threat level."""
 
     @validates('clock_1', 'clock_2', 'clock_3', 'clock_4')
-    def validate_clocks(self, key, value):
+    def validate_clocks(self, value):
         if value < 0:
             raise ValueError("Research clocks must be positive")
         if value > threat_clocks[self.threat_level]:
@@ -300,7 +303,7 @@ class Agent(Base):
     """Value=[0...6] if rank="Agent", else value=[0...8]."""
 
     @validates('stress')
-    def validates_stress(self, key, value):
+    def validates_stress(self, value):
         if self.rank == 'Agent':
             if not (0 <= value <= 6):
                 raise ValueError("For 'rank'=Agent agents, 'stress' must be between 0 and 6")
@@ -312,7 +315,7 @@ class Agent(Base):
     traumas = Column(ARRAY(Enum(*traumas_enum, name='traumas_enum')), default=[], nullable=False)
 
     @validates('traumas')
-    def validates_traumas(self, key, value):
+    def validates_traumas(self, value):
         if self.rank == 'Agent':
             if len(value) > 1:
                 raise ValueError("For 'rank'=Agent agents, you can only have up to 1 'trauma'")
@@ -647,7 +650,7 @@ class Tile(Base):
     """Must be False if can_place_containment is False or when abnormalities is null"""
 
     @validates('is_containment_unit')
-    def validates_null_abno(self, key, value):
+    def validates_null_abno(self, value):
         if self.abnormalities is not None or not value:
             raise ValueError(f'is_containment_unit must be False when no abnormalities are assigned to tile')
         return value
