@@ -35,5 +35,55 @@
     "Weapon",
     "Suit",
     "Gift"
-  ]
+  ],
+  "required_fields": {
+    "departments": [
+      "name"
+    ],
+    "abnormalities": [
+      "name",
+      "abno_code",
+      "blurb",
+      "threat_level",
+      "description",
+      "damage_type",
+      "favored_work",
+      "disfavored_work",
+      "can_breach",
+      "weaknesses",
+      "resists"
+    ],
+    "agents": [
+      "name",
+      "rank",
+      "department_id"
+    ],
+    "projects": [
+      "name",
+      "max_clock",
+      "curr_tick",
+      "department_id"
+    ],
+    "abilities": [
+      "name",
+      "agent_id"
+    ],
+    "harms": [
+      "level",
+      "is_physical",
+      "agent_id"
+    ],
+    "egos": [
+      "type",
+      "name",
+      "grade",
+      "effect",
+      "abnormality_id"
+    ],
+    "clocks": [
+      "name",
+      "max_count",
+      "important"
+    ]
+  }
 }

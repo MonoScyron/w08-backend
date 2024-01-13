@@ -23,11 +23,8 @@ db = SQLAlchemy()
 
 class Base(db.Model):
     __abstract__ = True
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
 
-    def simple_serialize(self):
-        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+    id = Column(Integer, primary_key=True, autoincrement=True)
 
 
 # Junction tables
@@ -40,7 +37,7 @@ project_department_association = Table(
 
 agent_ego_association = Table(
     'agent_ego_association', Base.metadata,
-    Column('agent_id', Integer, ForeignKey('agents.id'), nullable=False),
+    Column('agent_id', Integer, ForeignKey('agents.id'), nullable=True),
     Column('ego_id', Integer, ForeignKey('egos.id'), nullable=False)
 )
 """Junction table for agents and egos"""
@@ -52,21 +49,38 @@ agent_ability_association = Table(
 )
 """Junction table for agents and abilities"""
 
+agent_clock_association = Table(
+    'agent_clock_association', Base.metadata,
+    Column('agent_id', Integer, ForeignKey('agents.id'), nullable=True),
+    Column('clock_id', Integer, ForeignKey('clocks.id'), nullable=True)
+)
+"""Junction table for agents and clocks"""
+
+abnormality_clock_association = Table(
+    'abnormality_clock_association', Base.metadata,
+    Column('abnormality_id', Integer, ForeignKey('abnormalities.id'), nullable=True),
+    Column('clock_id', Integer, ForeignKey('clocks.id'), nullable=True)
+)
+"""Junction table for abnos and clocks"""
+
 
 class Facility(Base):
     """
-    Global data
+    Global data, should only have one row at a time
     """
     __tablename__ = 'facilities'
 
     # Columns
     available_PE = Column(Integer, default=0, nullable=False)
     available_rabbits = Column(Integer, default=0, nullable=False)
-    day = Column(Integer, nullable=False)
-    shift = Column(Integer, CheckConstraint('shift >= 0 AND shift <= 2', name='shift_constraint'), nullable=False)
+    day = Column(Integer, default=0, nullable=False)
+    shift = Column(Integer, CheckConstraint('shift >= 0 AND shift <= 2', name='shift_constraint'), default=0,
+                   nullable=False)
     alert_level = Column(Integer,
                          CheckConstraint('alert_level >= 0 AND alert_level <= 3', name='alert_level_constraint'),
                          default=0, nullable=False)
+    facility_constraint = CheckConstraint('id = 1')
+    """Make sure table only has one row"""
 
     def serialize(self):
         return {
@@ -92,7 +106,7 @@ class Department(Base):
 
     # Columns
     name = Column(String, nullable=False)
-    buffs = Column(ARRAY(String), default=[], nullable=True)
+    buffs = Column(ARRAY(String), default=[], nullable=False)
     """Department wide buffs for assigned agents"""
     rabbited = Column(Boolean, default=False, nullable=False)
     """If true, department is locked by rabbit protocol."""
@@ -107,10 +121,17 @@ class Department(Base):
             'rabbited': self.rabbited
         }
 
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name
+        }
+
 
 class Abnormality(Base):
     """
     Many-to-one with tiles
+    Many-to-many with clocks
     One-to-many with agents (suppressing/working on?)
     One-to-many with egos (obtained from)
     """
@@ -120,6 +141,7 @@ class Abnormality(Base):
     tile_id = Column(Integer(), ForeignKey("tiles.id"), nullable=True)
     tile = relationship('Tile', back_populates='abnormalities')
 
+    clocks = relationship("Clock", secondary=abnormality_clock_association, back_populates="abnormalities")
     agents = relationship("Agent", back_populates="abnormality")
     egos = relationship("Ego", back_populates="abnormality")
 
@@ -221,6 +243,15 @@ class Abnormality(Base):
             'player_notes': self.player_notes
         }
 
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'tile_id': self.tile_id,
+            'name': self.name,
+            'abno_code': self.abno_code,
+            'threat_level': self.threat_level
+        }
+
 
 class Agent(Base):
     """
@@ -229,6 +260,7 @@ class Agent(Base):
     Many-to-one with abnormalities (suppressing/working on?)
     Many-to-many with egos (obtained egos)
     Many-to-many with abilities (obtained abilities)
+    Many-to-many with clocks
     One-to-many with harms (obtained harms)
     """
     __tablename__ = "agents"
@@ -236,13 +268,14 @@ class Agent(Base):
     # Relationships
     tile_id = Column(Integer, ForeignKey('tiles.id'), nullable=True)
     tile = relationship('Tile', back_populates='agents')
-    department_id = Column(Integer, ForeignKey('departments.id'), nullable=True)
+    department_id = Column(Integer, ForeignKey('departments.id'), nullable=False)
     department = relationship('Department', back_populates='agents')
     abnormality_id = Column(Integer, ForeignKey('abnormalities.id'), nullable=True)
     abnormality = relationship('Abnormality', back_populates='agents')
 
     egos = relationship('Ego', secondary=agent_ego_association, back_populates='agents')
     abilities = relationship('Ability', secondary=agent_ability_association, back_populates='agents')
+    clocks = relationship("Clock", secondary=agent_clock_association, back_populates="agents")
 
     harms = relationship('Harm', back_populates='agent')
 
@@ -256,8 +289,7 @@ class Agent(Base):
     rank = Column(Enum(*ranks_enum, name='rank_enum'), nullable=False)
 
     physical_heal = Column(Integer, CheckConstraint('physical_heal >= 0 AND physical_heal <= 4',
-                                                    name='physical_heal_constraint'), default=0,
-                           nullable=False)
+                                                    name='physical_heal_constraint'), default=0, nullable=False)
     """Current count of physical healing clock. Value=[0...4]."""
     mental_heal = Column(Integer,
                          CheckConstraint('mental_heal >= 0 AND mental_heal <= 4', name='mental_heal_constraint'),
@@ -277,7 +309,7 @@ class Agent(Base):
                 raise ValueError("For 'rank'=Captain agents, 'stress' must be between 0 and 8")
         return value
 
-    traumas = Column(Enum(*traumas_enum, name='traumas_enum'), default=[], nullable=False)
+    traumas = Column(ARRAY(Enum(*traumas_enum, name='traumas_enum')), default=[], nullable=False)
 
     @validates('traumas')
     def validates_traumas(self, key, value):
@@ -407,10 +439,18 @@ class Agent(Base):
             'skirmish_lvl': self.skirmish_lvl
         }
 
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'department_id': self.department_id,
+            'rank': self.rank
+        }
+
 
 class Project(Base):
     """
-    Many-to-many with departments (projects assigned to department)
+    Many-to-one with departments (projects assigned to department)
     """
     __tablename__ = "projects"
 
@@ -437,6 +477,14 @@ class Project(Base):
             'curr_tick': self.curr_tick
         }
 
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'max_clock': self.max_clock,
+            'curr_tick': self.curr_tick
+        }
+
 
 class Ability(Base):
     """
@@ -446,6 +494,7 @@ class Ability(Base):
 
     # Relationships
     agents = relationship('Agent', secondary=agent_ability_association, back_populates='abilities')
+    """Must always be assigned to agent"""
 
     # Columns
     name = Column(String, nullable=False)
@@ -457,6 +506,13 @@ class Ability(Base):
             'name': self.name,
             'description': self.description,
             'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else []
+        }
+
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description
         }
 
 
@@ -485,6 +541,9 @@ class Harm(Base):
             'is_physical': self.is_physical,
             'description': self.description
         }
+
+    def simple_serialize(self):
+        return self.serialize()
 
 
 class Ego(Base):
@@ -524,29 +583,32 @@ class Ego(Base):
             'max_extracted': self.max_extracted
         }
 
+    def simple_serialize(self):
+        return {
+            'id': self.id,
+            'abnormality_id': self.abnormality_id,
+            'type': self.type,
+            'name': self.name,
+            'grade': self.grade
+        }
+
 
 class Clock(Base):
     """
-    Many-to-one with agents (agent the clock belongs to)
-    Many-to-one with abnormalities (abno the clock belongs to)
-    Only one of these relationships will ever be non-null, the other will always be null
+    Many-to-many with agents (agent the clock belongs to)
+    Many-to-many with abnormalities (abno the clock belongs to)
     """
     __tablename__ = 'clocks'
 
     # Relationships
-    agent_id = Column(Integer, ForeignKey('agents.id'), nullable=True)
-    agent = relationship('Agent', backref='clocks')
-    abnormality_id = Column(Integer, ForeignKey('abnormalities.id'), nullable=True)
-    abnormality = relationship('Abnormality', backref='clocks')
-
-    relationship_constraint = CheckConstraint(
-        "((agent_id IS NULL AND abnormality_id IS NOT NULL) OR (agent_id IS NOT NULL AND abnormality_id IS NULL))",
-        name='relationship_constraint'
-    )
+    agents = relationship("Agent", secondary=agent_clock_association, back_populates="clocks")
+    abnormalities = relationship("Abnormality", secondary=abnormality_clock_association, back_populates="clocks")
 
     # Columns
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
     max_count = Column(Integer, nullable=False)
-    tick_count = Column(Integer, CheckConstraint('tick_count < max_count', name='tick_count_constraint'),
+    tick_count = Column(Integer, CheckConstraint('tick_count <= max_count', name='tick_count_constraint'), default=0,
                         nullable=False)
     """Must be less than or equal to max_count"""
     important = Column(Boolean, default=False, nullable=False)
@@ -554,8 +616,8 @@ class Clock(Base):
     def serialize(self):
         return {
             'id': self.id,
-            'agent_id': self.agent_id,
-            'abnormality_id': self.abnormality_id,
+            'name': self.name,
+            'description': self.description,
             'max_count': self.max_count,
             'tick_count': self.tick_count,
             'important': self.important
