@@ -72,8 +72,7 @@
       "department_id"
     ],
     "abilities": [
-      "name",
-      "agent_id"
+      "name"
     ],
     "harms": [
       "level",

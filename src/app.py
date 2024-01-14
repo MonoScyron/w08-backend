@@ -53,15 +53,42 @@ def failure_response(message: str, code=404):
 
 # * Generic functions
 
+def catch_exception_wrapper(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except IntegrityError as e:
+        db.session.rollback()
+        return failure_response(f'{str(e)}', 400)
+    except StatementError as e:
+        db.session.rollback()
+        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
+    except Exception as e:
+        db.session.rollback()
+        return failure_response(str(e), 500)
+
+
 def get_all_from_model(model: db.Model):
     """
     Retrieve all objects from the specified SQLAlchemy model and serialize them
     :param model: Model representing the database table
     :return: Success response containing serialized objects
     """
-    all_objs = model.query.all()
+    all_objs = db.session.query(model).all()
     objs = [obj.serialize() for obj in all_objs]
     return success_response(objs)
+
+
+def get_one_from_model(model_id, model: db.Model):
+    """
+    Retrieve a single object from the specified SQLAlchemy model
+    :param model_id: Unique identifier of the object to be retrieved
+    :param model: Model representing the database table
+    :return: Success response containing the serialized object if found. Otherwise, returns failure response.
+    """
+    obj = db.session.query(model).get(model_id)
+    if not obj:
+        return failure_response(f'Not found for id: {model_id}')
+    return success_response(obj.serialize())
 
 
 def check_required_fields(data, model: db.Model):
@@ -80,9 +107,9 @@ def check_required_fields(data, model: db.Model):
 
 def create_model(data, model: db.Model):
     """
-    Create a new row of the specified SQLAlchemy model and add it to the database
+    Create a new row of the table represented by the SQLAlchemy model and add it to the database
     :param data: Object containing the data to for creating new row
-    :param model: Model representing the database table for which a new row is being created
+    :param model: Model representing the database table to create a new row for
     :return: Success response if instance successfully created. Otherwise, returns failure response.
     """
     try:
@@ -104,7 +131,7 @@ def create_model(data, model: db.Model):
 
 def delete_model_by_id(model_id: int, model: db.Model):
     """
-
+    Deletes a row from the table represented by the SQLAlchemy model
     :param model_id: Unique identifier of the row to be deleted
     :param model: Model representing the database table from which the instance is being deleted
     :return: Success response if instance successfully deleted. Otherwise, returns failure response.
@@ -121,6 +148,33 @@ def delete_model_by_id(model_id: int, model: db.Model):
     except IntegrityError as e:
         db.session.rollback()
         return failure_response(f'{str(e)}', 400)
+    except Exception as e:
+        db.session.rollback()
+        return failure_response(str(e), 500)
+
+
+def edit_model_by_id(model_id, data, model: db.Model):
+    """
+    Edits an existing row of the table represented by the SQLAlchemy model
+    :param model_id: Unique identifier of the row to be edited
+    :param data: Object containing the data to be updated
+    :param model: Model representing the database table to be updated
+    :return: Success response containing the updated object. Otherwise, returns failure response.
+    """
+    try:
+        queried_model = db.session.query(model).get(model_id)
+        if not queried_model:
+            return failure_response(f'Not found for id: {model_id}')
+        queried_model.update(**data)
+        db.session.commit()
+        return success_response(queried_model.serialize())
+
+    except IntegrityError as e:
+        db.session.rollback()
+        return failure_response(f'{str(e)}', 400)
+    except StatementError as e:
+        db.session.rollback()
+        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
     except Exception as e:
         db.session.rollback()
         return failure_response(str(e), 500)
@@ -176,6 +230,58 @@ def get_all_clocks():
 @app.route('/v1/tiles/', methods=['GET'])
 def get_all_tiles():
     return get_all_from_model(Tile)
+
+
+# * Get 1 routes
+
+@app.route('/v1/facilities/<int:facility_id>/', methods=['GET'])
+def get_facility(facility_id):
+    return get_one_from_model(facility_id, Facility)
+
+
+@app.route('/v1/departments/<int:department_id>/', methods=['GET'])
+def get_department(department_id):
+    return get_one_from_model(department_id, Department)
+
+
+@app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['GET'])
+def get_abnormality(abnormality_id):
+    return get_one_from_model(abnormality_id, Abnormality)
+
+
+@app.route('/v1/agents/<int:agent_id>/', methods=['GET'])
+def get_agent(agent_id):
+    return get_one_from_model(agent_id, Agent)
+
+
+@app.route('/v1/projects/<int:project_id>/', methods=['GET'])
+def get_project(project_id):
+    return get_one_from_model(project_id, Project)
+
+
+@app.route('/v1/abilities/<int:ability_id>/', methods=['GET'])
+def get_ability(ability_id):
+    return get_one_from_model(ability_id, Ability)
+
+
+@app.route('/v1/harms/<int:harm_id>/', methods=['GET'])
+def get_harm(harm_id):
+    return get_one_from_model(harm_id, Harm)
+
+
+@app.route('/v1/egos/<int:ego_id>/', methods=['GET'])
+def get_ego(ego_id):
+    return get_one_from_model(ego_id, Ego)
+
+
+@app.route('/v1/clocks/<int:clock_id>/', methods=['GET'])
+def get_clock(clock_id):
+    return get_one_from_model(clock_id, Clock)
+
+
+@app.route('/v1/tiles/<int:tile_id>/', methods=['GET'])
+def get_tile(tile_id):
+    return get_one_from_model(tile_id, Tile)
 
 
 # * Create routes
@@ -245,28 +351,7 @@ def create_ability():
     data = request.json
     if has_fields := check_required_fields(data, Ability):
         return has_fields
-
-    # Assign ability to agent
-    agent_id = data.get('agent_id')
-    if not (agent := db.session.query(Agent).get(agent_id)):
-        return failure_response(f'Agent not found for id: {agent_id}')
-    del data['agent_id']
-
-    try:
-        new_ability = Ability(**data)
-        agent.abilities.append(new_ability)
-        db.session.commit()
-        return success_response(new_ability.serialize(), 201)
-
-    except IntegrityError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)
-    except StatementError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)  # .splitlines().pop(0)
-    except Exception as e:
-        db.session.rollback()
-        return failure_response(str(e), 500)
+    return create_model(data, Ability)
 
 
 @app.route('/v1/harms/', methods=['POST'])
@@ -349,9 +434,71 @@ def delete_clock(clock_id):
     return delete_model_by_id(clock_id, Clock)
 
 
+# * Edit routes
+
+@app.route('/v1/facilities/<int:facility_id>/', methods=['POST'])
+def edit_facility(facility_id):
+    data = request.json
+    return edit_model_by_id(facility_id, data, Facility)
+
+
+@app.route('/v1/departments/<int:department_id>/', methods=['POST'])
+def edit_department(department_id):
+    data = request.json
+    return edit_model_by_id(department_id, data, Department)
+
+
+@app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['POST'])
+def edit_abnormality(abnormality_id):
+    data = request.json
+    return edit_model_by_id(abnormality_id, data, Abnormality)
+
+
+@app.route('/v1/agents/<int:agent_id>/', methods=['POST'])
+def edit_agent(agent_id):
+    data = request.json
+    return edit_model_by_id(agent_id, data, Agent)
+
+
+@app.route('/v1/projects/<int:project_id>/', methods=['POST'])
+def edit_project(project_id):
+    data = request.json
+    return edit_model_by_id(project_id, data, Project)
+
+
+@app.route('/v1/abilities/<int:ability_id>/', methods=['POST'])
+def edit_ability(ability_id):
+    data = request.json
+    return edit_model_by_id(ability_id, data, Ability)
+
+
+@app.route('/v1/harms/<int:harm_id>/', methods=['POST'])
+def edit_harm(harm_id):
+    data = request.json
+    return edit_model_by_id(harm_id, data, Harm)
+
+
+@app.route('/v1/egos/<int:ego_id>/', methods=['POST'])
+def edit_ego(ego_id):
+    data = request.json
+    return edit_model_by_id(ego_id, data, Ego)
+
+
+@app.route('/v1/clocks/<int:clock_id>/', methods=['POST'])
+def edit_clock(clock_id):
+    data = request.json
+    return edit_model_by_id(clock_id, data, Clock)
+
+
+@app.route('/v1/tiles/<int:tile_id>/', methods=['POST'])
+def edit_tile(tile_id):
+    data = request.json
+    return edit_model_by_id(tile_id, data, Tile)
+
+
 # * Runtime
 
-def facility_setup():
+def facility_init():
     with app.app_context():
         try:
             facility = db.session.query(Facility).all()
@@ -364,7 +511,7 @@ def facility_setup():
             abort(500, "Failed to set up facility")
 
 
-def departments_setup():
+def departments_init():
     with app.app_context():
         try:
             deps = db.session.query(Department).all()
@@ -381,7 +528,12 @@ def departments_setup():
             abort(500, "Failed to set up departments")
 
 
+def tiles_init():
+    # TODO: Initialize all tiles in tiles table (reference departments_init)
+    pass
+
+
 if __name__ == "__main__":
-    facility_setup()
-    departments_setup()
+    facility_init()
+    departments_init()
     app.run(host="0.0.0.0", port=5000, debug=True)
