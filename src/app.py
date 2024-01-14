@@ -96,7 +96,7 @@ def create_model(data, model: db.Model):
         return failure_response(f'{str(e)}', 400)
     except StatementError as e:
         db.session.rollback()
-        return failure_response(f'{str(e)}', 400)  # .splitlines().pop(0)
+        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
     except Exception as e:
         db.session.rollback()
         return failure_response(str(e), 500)

@@ -45,7 +45,7 @@ agent_ego_association = Table(
 
 agent_ability_association = Table(
     'agent_ability_association', Base.metadata,
-    Column('agent_id', Integer, ForeignKey('agents.id'), nullable=False),
+    Column('agent_id', Integer, ForeignKey('agents.id'), nullable=True),
     Column('ability_id', Integer, ForeignKey('abilities.id'), nullable=False)
 )
 """Junction table for agents and abilities"""
@@ -67,7 +67,7 @@ abnormality_clock_association = Table(
 
 class Facility(db.Model):
     """
-    Global data, should only have one row at a time
+    Global data, should only have 1 row at a time
     """
     __tablename__ = 'facilities'
     id = Column(Integer, default=1, primary_key=True)
@@ -99,6 +99,7 @@ class Department(db.Model):
     """
     One-to-many with agents (assigned department)
     Many-to-many with projects (assigned projects)
+    Should only have 5 rows at a time
     """
     __tablename__ = 'departments'
     id = Column(Integer, primary_key=True)
@@ -146,7 +147,7 @@ class Abnormality(Base):
 
     clocks = relationship("Clock", secondary=abnormality_clock_association, back_populates="abnormalities")
     agents = relationship("Agent", back_populates="abnormality")
-    egos = relationship("Ego", back_populates="abnormality")
+    egos = relationship("Ego", back_populates="abnormality", cascade="all, delete-orphan")
 
     # Columns
     name = Column(String, nullable=False)
@@ -277,10 +278,12 @@ class Agent(Base):
     abnormality = relationship('Abnormality', back_populates='agents')
 
     egos = relationship('Ego', secondary=agent_ego_association, back_populates='agents')
-    abilities = relationship('Ability', secondary=agent_ability_association, back_populates='agents')
+    abilities = relationship('Ability',
+                             secondary=agent_ability_association,
+                             back_populates='agents')
     clocks = relationship("Clock", secondary=agent_clock_association, back_populates="agents")
 
-    harms = relationship('Harm', back_populates='agent')
+    harms = relationship('Harm', back_populates='agent', cascade="all, delete-orphan")
 
     # Columns
     name = Column(String, nullable=False)
@@ -497,17 +500,18 @@ class Ability(Base):
 
     # Relationships
     agents = relationship('Agent', secondary=agent_ability_association, back_populates='abilities')
-    """Must always be assigned to agent"""
 
     # Columns
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    rank = Column(Enum(*ranks_enum, name='ranks_emum'), default='Agent', nullable=False)
 
     def serialize(self):
         return {
             'id': self.id,
             'name': self.name,
             'description': self.description,
+            'rank': self.rank,
             'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else []
         }
 
