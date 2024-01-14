@@ -112,21 +112,10 @@ def create_model(data, model: db.Model):
     :param model: Model representing the database table to create a new row for
     :return: Success response if instance successfully created. Otherwise, returns failure response.
     """
-    try:
-        new_model = model(**data)
-        db.session.add(new_model)
-        db.session.commit()
-        return success_response(new_model.serialize(), 201)
-
-    except IntegrityError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)
-    except StatementError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
-    except Exception as e:
-        db.session.rollback()
-        return failure_response(str(e), 500)
+    new_model = model(**data)
+    db.session.add(new_model)
+    db.session.commit()
+    return success_response(new_model.serialize(), 201)
 
 
 def delete_model_by_id(model_id: int, model: db.Model):
@@ -136,21 +125,13 @@ def delete_model_by_id(model_id: int, model: db.Model):
     :param model: Model representing the database table from which the instance is being deleted
     :return: Success response if instance successfully deleted. Otherwise, returns failure response.
     """
-    try:
-        obj = db.session.query(model).get(model_id)
-        if obj:
-            db.session.delete(obj)
-            db.session.commit()
-            return success_response(obj.serialize())
-        else:
-            return failure_response(f'Not found for id: {model_id}')
-
-    except IntegrityError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)
-    except Exception as e:
-        db.session.rollback()
-        return failure_response(str(e), 500)
+    obj = db.session.query(model).get(model_id)
+    if obj:
+        db.session.delete(obj)
+        db.session.commit()
+        return success_response(obj.serialize())
+    else:
+        return failure_response(f'Not found for id: {model_id}')
 
 
 def edit_model_by_id(model_id, data, model: db.Model):
@@ -161,23 +142,12 @@ def edit_model_by_id(model_id, data, model: db.Model):
     :param model: Model representing the database table to be updated
     :return: Success response containing the updated object. Otherwise, returns failure response.
     """
-    try:
-        queried_model = db.session.query(model).get(model_id)
-        if not queried_model:
-            return failure_response(f'Not found for id: {model_id}')
-        queried_model.update(**data)
-        db.session.commit()
-        return success_response(queried_model.serialize())
-
-    except IntegrityError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)
-    except StatementError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
-    except Exception as e:
-        db.session.rollback()
-        return failure_response(str(e), 500)
+    queried_model = db.session.query(model).get(model_id)
+    if not queried_model:
+        return failure_response(f'Not found for id: {model_id}')
+    queried_model.update(**data)
+    db.session.commit()
+    return success_response(queried_model.serialize())
 
 
 @app.route('/')
@@ -291,7 +261,7 @@ def create_department():
     data = request.json
     if has_fields := check_required_fields(data, Department):
         return has_fields
-    return create_model(data, Department)
+    return catch_exception_wrapper(create_model, data, Department)
 
 
 @app.route('/v1/abnormalities/', methods=['POST'])
@@ -299,7 +269,7 @@ def create_abnormality():
     data = request.json
     if has_fields := check_required_fields(data, Abnormality):
         return has_fields
-    return create_model(data, Abnormality)
+    return catch_exception_wrapper(create_model, data, Abnormality)
 
 
 @app.route('/v1/agents/', methods=['POST'])
@@ -314,7 +284,7 @@ def create_agent():
         return failure_response(f'Department not found for id: {department_id}')
     data.update({'department': department})
 
-    return create_model(data, Agent)
+    return catch_exception_wrapper(create_model, data, Agent)
 
 
 @app.route('/v1/projects/', methods=['POST'])
@@ -351,7 +321,7 @@ def create_ability():
     data = request.json
     if has_fields := check_required_fields(data, Ability):
         return has_fields
-    return create_model(data, Ability)
+    return catch_exception_wrapper(create_model, data, Ability)
 
 
 @app.route('/v1/harms/', methods=['POST'])
@@ -366,7 +336,7 @@ def create_harm():
         return failure_response(f'Agent not found for id: {agent_id}')
     data.update({'agent': agent})
 
-    return create_model(data, Harm)
+    return catch_exception_wrapper(create_model, data, Harm)
 
 
 @app.route('/v1/egos/', methods=['POST'])
@@ -381,7 +351,7 @@ def create_ego():
         return failure_response(f'Abnormality not found for id: {abnormality_id}')
     data.update({'abnormality': abnormality})
 
-    return create_model(data, Ego)
+    return catch_exception_wrapper(create_model, data, Ego)
 
 
 @app.route('/v1/clocks/', methods=['POST'])
@@ -389,49 +359,49 @@ def create_clock():
     data = request.json
     if has_fields := check_required_fields(data, Clock):
         return has_fields
-    return create_model(data, Clock)
+    return catch_exception_wrapper(create_model, data, Clock)
 
 
 # * Delete routes
 
 # @app.route('/v1/departments/<int:department_id>/', methods=['DELETE'])
 def delete_department(department_id):
-    return delete_model_by_id(department_id, Department)
+    return catch_exception_wrapper(delete_model_by_id, department_id, Department)
 
 
 @app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['DELETE'])
 def delete_abnormality(abnormality_id):
-    return delete_model_by_id(abnormality_id, Abnormality)
+    return catch_exception_wrapper(delete_model_by_id, abnormality_id, Abnormality)
 
 
 @app.route('/v1/agents/<int:agent_id>/', methods=['DELETE'])
 def delete_agent(agent_id):
-    return delete_model_by_id(agent_id, Agent)
+    return catch_exception_wrapper(delete_model_by_id, agent_id, Agent)
 
 
 @app.route('/v1/projects/<int:project_id>/', methods=['DELETE'])
 def delete_project(project_id):
-    return delete_model_by_id(project_id, Project)
+    return catch_exception_wrapper(delete_model_by_id, project_id, Project)
 
 
 @app.route('/v1/abilities/<int:ability_id>/', methods=['DELETE'])
 def delete_ability(ability_id):
-    return delete_model_by_id(ability_id, Ability)
+    return catch_exception_wrapper(delete_model_by_id, ability_id, Ability)
 
 
 @app.route('/v1/harms/<int:harm_id>/', methods=['DELETE'])
 def delete_harm(harm_id):
-    return delete_model_by_id(harm_id, Harm)
+    return catch_exception_wrapper(delete_model_by_id, harm_id, Harm)
 
 
 @app.route('/v1/egos/<int:ego_id>/', methods=['DELETE'])
 def delete_ego(ego_id):
-    return delete_model_by_id(ego_id, Ego)
+    return catch_exception_wrapper(delete_model_by_id, ego_id, Ego)
 
 
 @app.route('/v1/clocks/<int:clock_id>/', methods=['DELETE'])
 def delete_clock(clock_id):
-    return delete_model_by_id(clock_id, Clock)
+    return catch_exception_wrapper(delete_model_by_id, clock_id, Clock)
 
 
 # * Edit routes
@@ -439,61 +409,61 @@ def delete_clock(clock_id):
 @app.route('/v1/facilities/<int:facility_id>/', methods=['POST'])
 def edit_facility(facility_id):
     data = request.json
-    return edit_model_by_id(facility_id, data, Facility)
+    return catch_exception_wrapper(edit_model_by_id, facility_id, data, Facility)
 
 
 @app.route('/v1/departments/<int:department_id>/', methods=['POST'])
 def edit_department(department_id):
     data = request.json
-    return edit_model_by_id(department_id, data, Department)
+    return catch_exception_wrapper(edit_model_by_id, department_id, data, Department)
 
 
 @app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['POST'])
 def edit_abnormality(abnormality_id):
     data = request.json
-    return edit_model_by_id(abnormality_id, data, Abnormality)
+    return catch_exception_wrapper(edit_model_by_id, abnormality_id, data, Abnormality)
 
 
 @app.route('/v1/agents/<int:agent_id>/', methods=['POST'])
 def edit_agent(agent_id):
     data = request.json
-    return edit_model_by_id(agent_id, data, Agent)
+    return catch_exception_wrapper(edit_model_by_id, agent_id, data, Agent)
 
 
 @app.route('/v1/projects/<int:project_id>/', methods=['POST'])
 def edit_project(project_id):
     data = request.json
-    return edit_model_by_id(project_id, data, Project)
+    return catch_exception_wrapper(edit_model_by_id, project_id, data, Project)
 
 
 @app.route('/v1/abilities/<int:ability_id>/', methods=['POST'])
 def edit_ability(ability_id):
     data = request.json
-    return edit_model_by_id(ability_id, data, Ability)
+    return catch_exception_wrapper(edit_model_by_id, ability_id, data, Ability)
 
 
 @app.route('/v1/harms/<int:harm_id>/', methods=['POST'])
 def edit_harm(harm_id):
     data = request.json
-    return edit_model_by_id(harm_id, data, Harm)
+    return catch_exception_wrapper(edit_model_by_id, harm_id, data, Harm)
 
 
 @app.route('/v1/egos/<int:ego_id>/', methods=['POST'])
 def edit_ego(ego_id):
     data = request.json
-    return edit_model_by_id(ego_id, data, Ego)
+    return catch_exception_wrapper(edit_model_by_id, ego_id, data, Ego)
 
 
 @app.route('/v1/clocks/<int:clock_id>/', methods=['POST'])
 def edit_clock(clock_id):
     data = request.json
-    return edit_model_by_id(clock_id, data, Clock)
+    return catch_exception_wrapper(edit_model_by_id, clock_id, data, Clock)
 
 
 @app.route('/v1/tiles/<int:tile_id>/', methods=['POST'])
 def edit_tile(tile_id):
     data = request.json
-    return edit_model_by_id(tile_id, data, Tile)
+    return catch_exception_wrapper(edit_model_by_id, tile_id, data, Tile)
 
 
 # * Runtime
