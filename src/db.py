@@ -29,13 +29,6 @@ class Base(db.Model):
 
 
 # Junction tables
-project_department_association = Table(
-    'project_department_association', Base.metadata,
-    Column('department_id', Integer, ForeignKey('departments.id'), nullable=False),
-    Column('project_id', Integer, ForeignKey('projects.id'), nullable=False)
-)
-"""Junction table for projects and departments"""
-
 agent_ego_association = Table(
     'agent_ego_association', Base.metadata,
     Column('agent_id', Integer, ForeignKey('agents.id'), nullable=True),
@@ -98,7 +91,7 @@ class Facility(db.Model):
 class Department(db.Model):
     """
     One-to-many with agents (assigned department)
-    Many-to-many with projects (assigned projects)
+    One-to-many with projects (assigned projects)
     Should only have 5 rows at a time
     """
     __tablename__ = 'departments'
@@ -106,7 +99,7 @@ class Department(db.Model):
 
     # Relationships
     agents = relationship("Agent", back_populates="department")
-    projects = relationship("Project", secondary=project_department_association, back_populates="departments")
+    projects = relationship("Project", back_populates="department")
 
     # Columns
     name = Column(Enum(*department_names_enum, name='department_names_enum'), nullable=False)
@@ -461,7 +454,8 @@ class Project(Base):
     __tablename__ = "projects"
 
     # Relationships
-    departments = relationship('Department', secondary=project_department_association, back_populates='projects')
+    department_id = Column(Integer, ForeignKey('departments.id'), nullable=True)
+    department = relationship('Department', back_populates='projects')
 
     # Columns
     name = Column(String, nullable=False)
@@ -477,8 +471,7 @@ class Project(Base):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'departments': [department.simple_serialize() for department in
-                            self.departments] if self.departments else [],
+            'department_id': self.department_id,
             'max_clock': self.max_clock,
             'curr_tick': self.curr_tick
         }
@@ -487,6 +480,7 @@ class Project(Base):
         return {
             'id': self.id,
             'name': self.name,
+            'department_id': self.department_id,
             'max_clock': self.max_clock,
             'curr_tick': self.curr_tick
         }
@@ -651,6 +645,7 @@ class Tile(Base):
     is_containment_unit = Column(Boolean,
                                  CheckConstraint('can_place_containment = TRUE OR is_containment_unit = FALSE',
                                                  name='is_containment_unit_constraint'),
+                                 default=False,
                                  nullable=False)
     """Must be False if can_place_containment is False or when abnormalities is null"""
 

@@ -27,6 +27,7 @@ with open(data_json_path, 'r') as file:
     file_data = json.load(file)
     required_fields = file_data.get('required_fields')
     departments = file_data.get('departments')
+    containment_tiles = file_data.get('containment_tiles')
 
 
 # * Generic responses
@@ -56,12 +57,9 @@ def failure_response(message: str, code=404):
 def catch_exception_wrapper(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
-    except IntegrityError as e:
+    except (IntegrityError, StatementError) as e:
         db.session.rollback()
         return failure_response(f'{str(e)}', 400)
-    except StatementError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e).splitlines().pop(0)}', 400)
     except Exception as e:
         db.session.rollback()
         return failure_response(str(e), 500)
@@ -134,18 +132,24 @@ def delete_model_by_id(model_id: int, model: db.Model):
         return failure_response(f'Not found for id: {model_id}')
 
 
-def edit_model_by_id(model_id, data, model: db.Model):
+def edit_model_by_id(model_id, data, model: db.Model, relationships=None):
     """
     Edits an existing row of the table represented by the SQLAlchemy model
     :param model_id: Unique identifier of the row to be edited
     :param data: Object containing the data to be updated
     :param model: Model representing the database table to be updated
+    :param relationships: Relationships to be updated in the model
     :return: Success response containing the updated object. Otherwise, returns failure response.
     """
-    queried_model = db.session.query(model).get(model_id)
+    queried_model = db.session.query(model).filter_by(id=model_id)
     if not queried_model:
         return failure_response(f'Not found for id: {model_id}')
-    queried_model.update(**data)
+    queried_model.update(data)
+    queried_model = queried_model.first()
+    if relationships:
+        for k, v in relationships.items():
+            setattr(queried_model, k, v)
+
     db.session.commit()
     return success_response(queried_model.serialize())
 
@@ -293,27 +297,13 @@ def create_project():
     if has_fields := check_required_fields(data, Project):
         return has_fields
 
-    # Assign project to department
+    # Assign project to departments
     department_id = data.get('department_id')
     if not (department := db.session.query(Department).get(department_id)):
         return failure_response(f'Department not found for id: {department_id}')
-    del data['department_id']
+    data.update({'department': department})
 
-    try:
-        new_project = Project(**data)
-        department.projects.append(new_project)
-        db.session.commit()
-        return success_response(new_project.serialize(), 201)
-
-    except IntegrityError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)
-    except StatementError as e:
-        db.session.rollback()
-        return failure_response(f'{str(e)}', 400)  # .splitlines().pop(0)
-    except Exception as e:
-        db.session.rollback()
-        return failure_response(str(e), 500)
+    return catch_exception_wrapper(create_model, data, Project)
 
 
 @app.route('/v1/abilities/', methods=['POST'])
@@ -415,54 +405,109 @@ def edit_facility(facility_id):
 @app.route('/v1/departments/<int:department_id>/', methods=['POST'])
 def edit_department(department_id):
     data = request.json
+
+    # TODO: Assign agents & projects if exists
+
     return catch_exception_wrapper(edit_model_by_id, department_id, data, Department)
 
 
 @app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['POST'])
 def edit_abnormality(abnormality_id):
     data = request.json
+
+    # TODO: Assign tile, clocks, agents, egos if exists
+
     return catch_exception_wrapper(edit_model_by_id, abnormality_id, data, Abnormality)
 
 
 @app.route('/v1/agents/<int:agent_id>/', methods=['POST'])
 def edit_agent(agent_id):
     data = request.json
-    return catch_exception_wrapper(edit_model_by_id, agent_id, data, Agent)
+
+    # Assign department if exists
+    relationships = None
+    if 'department_id' in data:
+        department_id = data.get('department_id')
+        if not (department := db.session.query(Department).get(department_id)):
+            return failure_response(f'Department not found for id: {department_id}')
+        relationships = {'department': department}
+
+    # TODO: Assign tile, abnormality, abilities, clocks, harms if exists
+
+    return catch_exception_wrapper(edit_model_by_id, agent_id, data, Agent, relationships=relationships)
 
 
 @app.route('/v1/projects/<int:project_id>/', methods=['POST'])
 def edit_project(project_id):
     data = request.json
-    return catch_exception_wrapper(edit_model_by_id, project_id, data, Project)
+
+    # Assign department if exists
+    relationships = None
+    if 'department_id' in data:
+        department_id = data.get('department_id')
+        if not (department := db.session.query(Department).get(department_id)):
+            return failure_response(f'Department not found for id: {department_id}')
+        relationships = {'department': department}
+
+    return catch_exception_wrapper(edit_model_by_id, project_id, data, Project, relationships=relationships)
 
 
 @app.route('/v1/abilities/<int:ability_id>/', methods=['POST'])
 def edit_ability(ability_id):
     data = request.json
+
+    # TODO: Assign agents if exists
+
     return catch_exception_wrapper(edit_model_by_id, ability_id, data, Ability)
 
 
 @app.route('/v1/harms/<int:harm_id>/', methods=['POST'])
 def edit_harm(harm_id):
     data = request.json
-    return catch_exception_wrapper(edit_model_by_id, harm_id, data, Harm)
+
+    # Assign agent if exists
+    relationships = None
+    if 'agent_id' in data:
+        agent_id = data.get('agent_id')
+        if not (agent := db.session.query(Agent).get(agent_id)):
+            return failure_response(f'Agent not found for id: {agent_id}')
+        relationships = {'agent': agent}
+
+    return catch_exception_wrapper(edit_model_by_id, harm_id, data, Harm, relationships=relationships)
 
 
 @app.route('/v1/egos/<int:ego_id>/', methods=['POST'])
 def edit_ego(ego_id):
     data = request.json
-    return catch_exception_wrapper(edit_model_by_id, ego_id, data, Ego)
+
+    # Assign abnormality if exists
+    relationships = None
+    if 'abnormality_id' in data:
+        abnormality_id = data.get('abnormality_id')
+        if not (abnormality := db.session.query(Abnormality).get(abnormality_id)):
+            return failure_response(f'Abnormality not found for id: {abnormality_id}')
+        relationships = {'abnormality': abnormality}
+
+    # TODO: Assign agents if exists
+
+    return catch_exception_wrapper(edit_model_by_id, ego_id, data, Ego, relationships=relationships)
 
 
 @app.route('/v1/clocks/<int:clock_id>/', methods=['POST'])
 def edit_clock(clock_id):
     data = request.json
+
+    # TODO: Assign agents, abnormalities if exists
+
     return catch_exception_wrapper(edit_model_by_id, clock_id, data, Clock)
 
 
 @app.route('/v1/tiles/<int:tile_id>/', methods=['POST'])
 def edit_tile(tile_id):
     data = request.json
+
+    # TODO: Assign abnormalities, agents if exists
+
     return catch_exception_wrapper(edit_model_by_id, tile_id, data, Tile)
 
 
@@ -499,11 +544,26 @@ def departments_init():
 
 
 def tiles_init():
-    # TODO: Initialize all tiles in tiles table (reference departments_init)
-    pass
+    with app.app_context():
+        try:
+            tiles = db.session.query(Tile).all()
+            if len(tiles) != 448:
+                db.session.query(Tile).delete()
+
+                for i in range(16):
+                    containment_list = containment_tiles[str(i)] if str(i) in containment_tiles else []
+                    for j in range(28):
+                        new_tile = Tile(x=j, y=i, can_place_containment=(j in containment_list))
+                        db.session.add(new_tile)
+
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+            abort(500, "Failed to set up tiles")
 
 
 if __name__ == "__main__":
     facility_init()
     departments_init()
+    tiles_init()
     app.run(host="0.0.0.0", port=5000, debug=True)

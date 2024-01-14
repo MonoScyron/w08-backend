@@ -6,13 +6,11 @@
     "Safety": 3,
     "Disciplinary": 4
   },
-  "threat_levels": [
-    "Zayin",
-    "Teth",
-    "He",
-    "Waw",
-    "Aleph"
-  ],
+  "TODO": "Add actual coords for tiles that can have a containment unit on them",
+  "containment_tiles": {
+    "0": [0]
+  },
+  "threat_levels": ["Zayin", "Teth", "He", "Waw", "Aleph"],
   "threat_clocks": {
     "Zayin": 4,
     "Teth": 6,
