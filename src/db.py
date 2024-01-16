@@ -63,7 +63,8 @@ class Facility(db.Model):
     Global data, should only have 1 row at a time
     """
     __tablename__ = 'facilities'
-    id = Column(Integer, default=1, primary_key=True)
+    id = Column(Integer, CheckConstraint('id = 1', name='facility_row_constraint'), default=1, primary_key=True)
+    """Make sure table only has one row"""
 
     # Columns
     available_PE = Column(Integer, default=0, nullable=False)
@@ -74,8 +75,6 @@ class Facility(db.Model):
     alert_level = Column(Integer,
                          CheckConstraint('alert_level >= 0 AND alert_level <= 3', name='alert_level_constraint'),
                          default=0, nullable=False)
-    facility_constraint = CheckConstraint('id = 1')
-    """Make sure table only has one row"""
 
     def serialize(self):
         return {
@@ -138,7 +137,10 @@ class Abnormality(Base):
     tile_id = Column(Integer(), ForeignKey("tiles.id"), nullable=True)
     tile = relationship('Tile', back_populates='abnormalities')
 
-    clocks = relationship("Clock", secondary=abnormality_clock_association, back_populates="abnormalities")
+    clocks = relationship("Clock",
+                          secondary=abnormality_clock_association,
+                          lazy='joined',
+                          back_populates="abnormalities")
     agents = relationship("Agent", back_populates="abnormality")
     egos = relationship("Ego", back_populates="abnormality", cascade="all, delete-orphan")
 
@@ -155,9 +157,14 @@ class Abnormality(Base):
     """If True, abno is breaching. Cannot be True when is_working is True."""
     is_working = Column(Boolean, default=False, nullable=False)
     """If True, abno is being worked on. Cannot be True when is_breaching is True."""
-    breaching_xor_working = CheckConstraint(
-        '(is_breaching = true AND NOT is_working) OR (is_working = true AND NOT is_breaching)',
-        name='breaching_xor_working')
+
+    __table_args__ = (
+        CheckConstraint('NOT (is_working AND is_breaching)', name='not_breaching_and_working'),
+        CheckConstraint('management_show >= 0 AND management_show <= array_length(management_notes, 1)',
+                        name='management_show_constraint'),
+        CheckConstraint('story_show >= 0 AND story_show <= array_length(stories, 1)',
+                        name='story_show_constraint')
+    )
 
     description = Column(Text, nullable=False)
     damage_type = Column(String, nullable=False)
@@ -167,16 +174,10 @@ class Abnormality(Base):
     weaknesses = Column(String, nullable=False)
     resists = Column(String, nullable=False)
 
-    management_show = Column(Integer, CheckConstraint(
-        'management_show >= 0 AND management_show <= array_length(management_notes, 1)',
-        name='management_show_constraint'), default=0,
-                             nullable=False)
+    management_show = Column(Integer, default=0, nullable=False)
     """Show management notes up to and including this number. Must be less than or equal to len(management_notes)."""
     management_notes = Column(ARRAY(Text), default=[], nullable=False)
-    story_show = Column(Integer, CheckConstraint('story_show >= 0 AND story_show <= array_length(stories, 1)',
-                                                 name='story_show_constraint'),
-                        default=0,
-                        nullable=False)
+    story_show = Column(Integer, default=0, nullable=False)
     """Show story up to and including this number. Must be less than or equal to len(stories)."""
     stories = Column(ARRAY(Text), default=[], nullable=False)
 
@@ -196,7 +197,7 @@ class Abnormality(Base):
     """Tick count for research clock 4. Min 0, max value dependent on threat level."""
 
     @validates('clock_1', 'clock_2', 'clock_3', 'clock_4')
-    def validate_clocks(self, value):
+    def validate_clocks(self, key, value):
         if value < 0:
             raise ValueError("Research clocks must be positive")
         if value > threat_clocks[self.threat_level]:
@@ -212,7 +213,9 @@ class Abnormality(Base):
         return {
             'id': self.id,
             'tile_id': self.tile_id,
+            'tile': self.tile.simple_serialize() if self.tile else None,
             'name': self.name,
+            'clocks': [clock.simple_serialize() for clock in self.clocks] if self.clocks else [],
             'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
             'egos': [ego.simple_serialize() for ego in self.egos] if self.egos else [],
             'abno_code': self.abno_code,
@@ -284,6 +287,8 @@ class Agent(Base):
     """Flavor text blurb"""
     current_status = Column(String, nullable=True)
     """What the agent is currently doing"""
+    uncontrollable = Column(String, nullable=True)
+    """Why agent is uncontrollable. Null if agent is controllable."""
     character_notes = Column(Text, nullable=True)
     rank = Column(Enum(*ranks_enum, name='rank_enum'), nullable=False)
 
@@ -299,7 +304,7 @@ class Agent(Base):
     """Value=[0...6] if rank="Agent", else value=[0...8]."""
 
     @validates('stress')
-    def validates_stress(self, value):
+    def validates_stress(self, key, value):
         if self.rank == 'Agent':
             if not (0 <= value <= 6):
                 raise ValueError("For 'rank'=Agent agents, 'stress' must be between 0 and 6")
@@ -311,7 +316,7 @@ class Agent(Base):
     traumas = Column(ARRAY(Enum(*traumas_enum, name='traumas_enum')), default=[], nullable=False)
 
     @validates('traumas')
-    def validates_traumas(self, value):
+    def validates_traumas(self, key, value):
         if self.rank == 'Agent':
             if len(value) > 1:
                 raise ValueError("For 'rank'=Agent agents, you can only have up to 1 'trauma'")
@@ -401,14 +406,19 @@ class Agent(Base):
         return {
             'id': self.id,
             'tile_id': self.tile_id,
+            'tile': self.tile.simple_serialize() if self.tile else None,
             'name': self.name,
             'department_id': self.department_id,
+            'department': self.department.simple_serialize(),
             'egos': [ego.simple_serialize() for ego in self.egos] if self.egos else [],
+            'clocks': [clock.simple_serialize() for clock in self.clocks] if self.clocks else [],
             'abilities': [ability.simple_serialize() for ability in self.abilities] if self.abilities else [],
             'harms': [harm.simple_serialize() for harm in self.harms] if self.harms else [],
             'abnormality_id': self.abnormality_id,
+            'abnormality': self.abnormality.simple_serialize() if self.abnormality else None,
             'blurb': self.blurb,
             'current_status': self.current_status,
+            'uncontrollable': self.uncontrollable,
             'character_notes': self.character_notes,
             'rank': self.rank,
             'physical_heal': self.physical_heal,
@@ -461,10 +471,12 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     max_clock = Column(Integer, nullable=False)
-    curr_tick = Column(Integer,
-                       CheckConstraint('curr_tick >= 0 AND curr_tick <= max_clock', name='curr_tick_constraint'),
-                       default=0, nullable=False)
+    curr_tick = Column(Integer, default=0, nullable=False)
     """Must be less than or equal to max_clock"""
+
+    __table_args__ = (
+        CheckConstraint('curr_tick >= 0 AND curr_tick <= max_clock', name='curr_tick_constraint'),
+    )
 
     def serialize(self):
         return {
@@ -472,6 +484,7 @@ class Project(Base):
             'name': self.name,
             'description': self.description,
             'department_id': self.department_id,
+            'department': self.department.simple_serialize() if self.department else None,
             'max_clock': self.max_clock,
             'curr_tick': self.curr_tick
         }
@@ -539,6 +552,7 @@ class Harm(Base):
         return {
             'id': self.id,
             'agent_id': self.agent_id,
+            'agent': self.agent.simple_serialize(),
             'level': self.level,
             'is_physical': self.is_physical,
             'description': self.description
@@ -567,15 +581,18 @@ class Ego(Base):
     grade = Column(Enum(*threat_levels_enum, name='threat_levels_enum'), nullable=False)
     effect = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    max_extracted = Column(Integer,
-                           CheckConstraint("max_extracted IS NULL OR type != 'Gift'", name='max_extracted_constraint'),
-                           nullable=True)
+    max_extracted = Column(Integer, nullable=True)
     """Maximum amount of ego that can be extracted. Should be Null if type="Gift"."""
+
+    __table_args__ = (
+        CheckConstraint("max_extracted IS NULL OR type != 'Gift'", name='max_extracted_constraint'),
+    )
 
     def serialize(self):
         return {
             'id': self.id,
             'abnormality_id': self.abnormality_id,
+            'abnormality': self.abnormality.simple_serialize(),
             'type': self.type,
             'name': self.name,
             'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
@@ -604,16 +621,22 @@ class Clock(Base):
 
     # Relationships
     agents = relationship("Agent", secondary=agent_clock_association, back_populates="clocks")
-    abnormalities = relationship("Abnormality", secondary=abnormality_clock_association, back_populates="clocks")
+    abnormalities = relationship("Abnormality",
+                                 secondary=abnormality_clock_association,
+                                 lazy='joined',
+                                 back_populates="clocks")
 
     # Columns
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     max_count = Column(Integer, nullable=False)
-    tick_count = Column(Integer, CheckConstraint('tick_count <= max_count', name='tick_count_constraint'), default=0,
-                        nullable=False)
+    tick_count = Column(Integer, default=0, nullable=False)
     """Must be less than or equal to max_count"""
     important = Column(Boolean, default=False, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint('tick_count <= max_count', name='tick_count_constraint'),
+    )
 
     def serialize(self):
         return {
@@ -622,8 +645,14 @@ class Clock(Base):
             'description': self.description,
             'max_count': self.max_count,
             'tick_count': self.tick_count,
-            'important': self.important
+            'important': self.important,
+            'agents': [agent.simple_serialize() for agent in self.agents] if self.agents else [],
+            'abnormalities': [abnormality.simple_serialize() for abnormality in
+                              self.abnormalities] if self.abnormalities else []
         }
+
+    def simple_serialize(self):
+        pass
 
 
 class Tile(Base):
@@ -642,15 +671,11 @@ class Tile(Base):
     x = Column(Integer, CheckConstraint('x >= 0 AND x <= 27', name='x_constraint'), nullable=False)
     can_place_containment = Column(Boolean, nullable=False)
 
-    is_containment_unit = Column(Boolean,
-                                 CheckConstraint('can_place_containment = TRUE OR is_containment_unit = FALSE',
-                                                 name='is_containment_unit_constraint'),
-                                 default=False,
-                                 nullable=False)
+    is_containment_unit = Column(Boolean, default=False, nullable=False)
     """Must be False if can_place_containment is False or when abnormalities is null"""
 
     @validates('is_containment_unit')
-    def validates_null_abno(self, value):
+    def validates_null_abno(self, key, value):
         if self.abnormalities is not None or not value:
             raise ValueError(f'is_containment_unit must be False when no abnormalities are assigned to tile')
         return value
@@ -669,6 +694,11 @@ class Tile(Base):
         if self.abnormalities is not None or value is None:
             raise ValueError(f'{key} must be NULL when no abnormalities are assigned to tile')
         return value
+
+    __table_args__ = (
+        CheckConstraint('can_place_containment = TRUE OR is_containment_unit = FALSE',
+                        name='is_containment_unit_constraint'),
+    )
 
     def serialize(self):
         return {

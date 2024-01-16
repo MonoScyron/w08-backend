@@ -19,75 +19,70 @@
     "Aleph": 16
   },
   "ranks": [
-    "Agent",
-    "Captain, Information",
-    "Captain, Training",
-    "Captain, Safety",
-    "Captain, Control",
-    "Captain, Disciplinary"
+    "Agent", "Captain, Information", "Captain, Training", "Captain, Safety", "Captain, Control", "Captain, Disciplinary"
   ],
-  "traumas": [
-    "Cold",
-    "Haunted",
-    "Obsessed",
-    "Paranoid",
-    "Reckless",
-    "Soft",
-    "Unstable",
-    "Vicious"
-  ],
-  "ego_types": [
-    "Weapon",
-    "Suit",
-    "Gift"
-  ],
-  "required_fields": {
-    "departments": [
-      "name"
-    ],
-    "abnormalities": [
-      "name",
-      "abno_code",
-      "blurb",
-      "threat_level",
-      "description",
-      "damage_type",
-      "favored_work",
-      "disfavored_work",
-      "can_breach",
-      "weaknesses",
-      "resists"
-    ],
-    "agents": [
-      "name",
-      "rank",
-      "department_id"
-    ],
-    "projects": [
-      "name",
-      "max_clock",
-      "curr_tick",
-      "department_id"
-    ],
-    "abilities": [
-      "name"
-    ],
-    "harms": [
-      "level",
-      "is_physical",
-      "agent_id"
-    ],
-    "egos": [
-      "type",
-      "name",
-      "grade",
-      "effect",
-      "abnormality_id"
-    ],
-    "clocks": [
-      "name",
-      "max_count",
-      "important"
-    ]
+  "traumas": ["Cold", "Haunted", "Obsessed", "Paranoid", "Reckless", "Soft", "Unstable", "Vicious"],
+  "ego_types": ["Weapon", "Suit", "Gift"],
+  "field_to_tablename": {
+    "department_id": "departments",
+    "department_ids": "departments",
+    "abnormality_id": "abnormalities",
+    "abnormality_ids": "abnormalities",
+    "agent_id": "agents",
+    "agent_ids": "agents",
+    "project_id": "projects",
+    "project_ids": "projects",
+    "ability_id": "abilities",
+    "ability_ids": "abilities",
+    "harm_id": "harms",
+    "harm_ids": "harms",
+    "ego_id": "egos",
+    "ego_ids": "egos",
+    "clock_id": "clocks",
+    "clock_ids": "clocks",
+    "tile_id": "tiles",
+    "tile_ids": "tiles"
+  },
+  "assign_fields": {
+    "departments": {
+      "agent_ids": "agents",
+      "project_ids": "projects"
+    },
+    "abnormalities": {
+      "tile_id": "tile",
+      "clock_ids": "clock",
+      "agent_ids": "agents",
+      "ego_ids": "egos"
+    },
+    "agents": {
+      "tile_id": "tile",
+      "department_id": "department",
+      "abnormality_id": "abnormality",
+      "ego_ids": "egos",
+      "ability_ids": "abilities",
+      "clock_ids": "clocks",
+      "harm_ids": "harms"
+    },
+    "projects": {
+      "department_id": "department"
+    },
+    "abilities": {
+      "agent_ids": "agents"
+    },
+    "harms": {
+      "agent_id": "agent"
+    },
+    "egos": {
+      "agent_ids": "agents",
+      "abnormality_id": "abnormality"
+    },
+    "clocks": {
+      "agent_ids": "agents",
+      "abnormality_ids": "abnormalities"
+    },
+    "tiles": {
+      "agent_ids": "agents",
+      "abnormality_ids": "abnormalities"
+    }
   }
 }

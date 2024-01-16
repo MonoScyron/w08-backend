@@ -1,14 +1,23 @@
 import json
 import os
 
+import logging
+
 from psycopg2 import IntegrityError
+from sqlalchemy import inspect
 from sqlalchemy.exc import StatementError
 
 from flask import Flask, request, abort
 from flask_migrate import Migrate
+from sqlalchemy.orm import joinedload
 
 from db import db, data_json_path
 from db import Facility, Department, Abnormality, Agent, Project, Ability, Harm, Ego, Clock, Tile
+
+logging.basicConfig(level=logging.DEBUG)
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(stream_handler)
 
 app = Flask(__name__)
 
@@ -23,11 +32,25 @@ with app.app_context():
     mig.init_app(app)
     db.create_all()
 
+required_fields = {}
+relationship_fields = {}
+tablename_to_model = {}
+for db_model in [Facility, Department, Abnormality, Agent, Project, Ability, Harm, Ego, Clock, Tile]:
+    tablename_to_model[db_model.__tablename__] = db_model
+    inspector = inspect(db_model)
+
+    columns = inspector.columns.values()
+    required_fields[db_model.__tablename__] = [column.name for column in columns if
+                                               not column.nullable and column.default is None and column.name != 'id']
+
+    relationship_fields[db_model.__tablename__] = inspector.relationships.keys()
+
 with open(data_json_path, 'r') as file:
     file_data = json.load(file)
-    required_fields = file_data.get('required_fields')
     departments = file_data.get('departments')
     containment_tiles = file_data.get('containment_tiles')
+    assign_fields = file_data.get('assign_fields')
+    field_to_tablename = file_data.get('field_to_tablename')
 
 
 # * Generic responses
@@ -65,30 +88,6 @@ def catch_exception_wrapper(func, *args, **kwargs):
         return failure_response(str(e), 500)
 
 
-def get_all_from_model(model: db.Model):
-    """
-    Retrieve all objects from the specified SQLAlchemy model and serialize them
-    :param model: Model representing the database table
-    :return: Success response containing serialized objects
-    """
-    all_objs = db.session.query(model).all()
-    objs = [obj.serialize() for obj in all_objs]
-    return success_response(objs)
-
-
-def get_one_from_model(model_id, model: db.Model):
-    """
-    Retrieve a single object from the specified SQLAlchemy model
-    :param model_id: Unique identifier of the object to be retrieved
-    :param model: Model representing the database table
-    :return: Success response containing the serialized object if found. Otherwise, returns failure response.
-    """
-    obj = db.session.query(model).get(model_id)
-    if not obj:
-        return failure_response(f'Not found for id: {model_id}')
-    return success_response(obj.serialize())
-
-
 def check_required_fields(data, model: db.Model):
     """
     Validate the presence of required fields in the request for a specific SQLAlchemy model
@@ -103,6 +102,68 @@ def check_required_fields(data, model: db.Model):
     return None
 
 
+def update_relationships(data, model_instance, model: db.Model):
+    """
+    Update the relationships of a model instance based on the data provided in the request.
+    :param data: Data from the request containing the relationships to be updated.
+    :param model_instance: Instance to update the relationships of
+    :param model: Model representing the table in the database
+    :return: None
+    """
+    model_assign_fields = assign_fields[model.__tablename__]
+    for k in data.keys():
+        if k in model_assign_fields.keys():
+            relationship_id = data.get(k)
+
+            logging.debug((type(relationship_id) is list))
+            if not type(relationship_id) is list:
+
+                logging.debug(f'{field_to_tablename[k]}')
+                logging.debug(f'{tablename_to_model[field_to_tablename[k]]}')
+
+                if not (relationship := tablename_to_model[field_to_tablename[k]].query.get(relationship_id)):
+                    return failure_response(
+                        f'Row not found in table \'{field_to_tablename[k]}\' for id={relationship_id}'
+                    )
+                setattr(model_instance, model_assign_fields[k], relationship)
+            else:
+                relationship_list = []
+                for r_id in relationship_id:
+                    logging.debug(f'{field_to_tablename[k]}')
+                    logging.debug(f'{tablename_to_model[field_to_tablename[k]]}')
+
+                    if not (relationship := tablename_to_model[field_to_tablename[k]].query.get(r_id)):
+                        return failure_response(f'Row not found in table \'{field_to_tablename[k]}\' for id={r_id}')
+                    relationship_list.append(relationship)
+
+                logging.debug(f'{relationship_list}')
+                getattr(model_instance, model_assign_fields[k]).append(relationship_list)
+
+
+def get_all_from_model(model: db.Model):
+    """
+    Retrieve all objects from the specified SQLAlchemy model and serialize them
+    :param model: Model representing the database table
+    :return: Success response containing serialized objects
+    """
+    all_objs = model.query.all()
+    objs = [obj.serialize() for obj in all_objs]
+    return success_response(objs)
+
+
+def get_one_from_model(model_id, model: db.Model):
+    """
+    Retrieve a single object from the specified SQLAlchemy model
+    :param model_id: Unique identifier of the object to be retrieved
+    :param model: Model representing the database table
+    :return: Success response containing the serialized object if found. Otherwise, returns failure response.
+    """
+    obj = model.query.get(model_id)
+    if not obj:
+        return failure_response(f'Row not found for id: {model_id}')
+    return success_response(obj.serialize())
+
+
 def create_model(data, model: db.Model):
     """
     Create a new row of the table represented by the SQLAlchemy model and add it to the database
@@ -110,8 +171,13 @@ def create_model(data, model: db.Model):
     :param model: Model representing the database table to create a new row for
     :return: Success response if instance successfully created. Otherwise, returns failure response.
     """
+    if has_fields := check_required_fields(data, model):
+        return has_fields
+
     new_model = model(**data)
     db.session.add(new_model)
+    update_relationships(data, new_model, model)
+
     db.session.commit()
     return success_response(new_model.serialize(), 201)
 
@@ -120,35 +186,41 @@ def delete_model_by_id(model_id: int, model: db.Model):
     """
     Deletes a row from the table represented by the SQLAlchemy model
     :param model_id: Unique identifier of the row to be deleted
-    :param model: Model representing the database table from which the instance is being deleted
+    :param model: Model representing the database table being updated
     :return: Success response if instance successfully deleted. Otherwise, returns failure response.
     """
-    obj = db.session.query(model).get(model_id)
-    if obj:
-        db.session.delete(obj)
+    model_instance = model.query
+    for relationship in relationship_fields[model.__tablename__]:
+        model_instance = model_instance.options(joinedload(getattr(model, relationship)))
+    model_instance = model_instance.get(model_id)
+    if model_instance:
+        db.session.delete(model_instance)
         db.session.commit()
-        return success_response(obj.serialize())
+        return success_response(model_instance.serialize())
     else:
-        return failure_response(f'Not found for id: {model_id}')
+        return failure_response(f'Row not found for id: {model_id}')
 
 
-def edit_model_by_id(model_id, data, model: db.Model, relationships=None):
+def edit_model_by_id(model_id, data, model: db.Model):
     """
     Edits an existing row of the table represented by the SQLAlchemy model
     :param model_id: Unique identifier of the row to be edited
     :param data: Object containing the data to be updated
     :param model: Model representing the database table to be updated
-    :param relationships: Relationships to be updated in the model
     :return: Success response containing the updated object. Otherwise, returns failure response.
     """
-    queried_model = db.session.query(model).filter_by(id=model_id)
+    queried_model = model.query.get(model_id)
     if not queried_model:
-        return failure_response(f'Not found for id: {model_id}')
-    queried_model.update(data)
-    queried_model = queried_model.first()
-    if relationships:
-        for k, v in relationships.items():
-            setattr(queried_model, k, v)
+        return failure_response(f'Row not found for id: {model_id}')
+
+    # Update columns
+    table = model.metadata.tables[model.__tablename__]
+    for k, v in data.items():
+        if k not in table.columns:
+            return failure_response(f'Column \'{k}\' not found', 400)
+        setattr(queried_model, k, v)
+
+    update_relationships(data, queried_model, model)
 
     db.session.commit()
     return success_response(queried_model.serialize())
@@ -263,102 +335,54 @@ def get_tile(tile_id):
 # @app.route('/v1/departments/', methods=['POST'])
 def create_department():
     data = request.json
-    if has_fields := check_required_fields(data, Department):
-        return has_fields
     return catch_exception_wrapper(create_model, data, Department)
 
 
 @app.route('/v1/abnormalities/', methods=['POST'])
 def create_abnormality():
     data = request.json
-    if has_fields := check_required_fields(data, Abnormality):
-        return has_fields
     return catch_exception_wrapper(create_model, data, Abnormality)
 
 
 @app.route('/v1/agents/', methods=['POST'])
 def create_agent():
     data = request.json
-    if has_fields := check_required_fields(data, Agent):
-        return has_fields
-
-    # Assign agent to department
-    department_id = data.get('department_id')
-    if not (department := db.session.query(Department).get(department_id)):
-        return failure_response(f'Department not found for id: {department_id}')
-    data.update({'department': department})
-
     return catch_exception_wrapper(create_model, data, Agent)
 
 
 @app.route('/v1/projects/', methods=['POST'])
 def create_project():
     data = request.json
-    if has_fields := check_required_fields(data, Project):
-        return has_fields
-
-    # Assign project to departments
-    department_id = data.get('department_id')
-    if not (department := db.session.query(Department).get(department_id)):
-        return failure_response(f'Department not found for id: {department_id}')
-    data.update({'department': department})
-
     return catch_exception_wrapper(create_model, data, Project)
 
 
 @app.route('/v1/abilities/', methods=['POST'])
 def create_ability():
     data = request.json
-    if has_fields := check_required_fields(data, Ability):
-        return has_fields
     return catch_exception_wrapper(create_model, data, Ability)
 
 
 @app.route('/v1/harms/', methods=['POST'])
 def create_harm():
     data = request.json
-    if has_fields := check_required_fields(data, Harm):
-        return has_fields
-
-    # Assign harm to agent
-    agent_id = data.get('agent_id')
-    if not (agent := db.session.query(Agent).get(agent_id)):
-        return failure_response(f'Agent not found for id: {agent_id}')
-    data.update({'agent': agent})
-
     return catch_exception_wrapper(create_model, data, Harm)
 
 
 @app.route('/v1/egos/', methods=['POST'])
 def create_ego():
     data = request.json
-    if has_fields := check_required_fields(data, Ego):
-        return has_fields
-
-    # Assign ego to abno
-    abnormality_id = data.get('abnormality_id')
-    if not (abnormality := db.session.query(Abnormality).get(abnormality_id)):
-        return failure_response(f'Abnormality not found for id: {abnormality_id}')
-    data.update({'abnormality': abnormality})
-
     return catch_exception_wrapper(create_model, data, Ego)
 
 
 @app.route('/v1/clocks/', methods=['POST'])
 def create_clock():
     data = request.json
-    if has_fields := check_required_fields(data, Clock):
-        return has_fields
     return catch_exception_wrapper(create_model, data, Clock)
 
 
 # * Delete routes
 
 # @app.route('/v1/departments/<int:department_id>/', methods=['DELETE'])
-def delete_department(department_id):
-    return catch_exception_wrapper(delete_model_by_id, department_id, Department)
-
-
 @app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['DELETE'])
 def delete_abnormality(abnormality_id):
     return catch_exception_wrapper(delete_model_by_id, abnormality_id, Abnormality)
@@ -405,109 +429,54 @@ def edit_facility(facility_id):
 @app.route('/v1/departments/<int:department_id>/', methods=['POST'])
 def edit_department(department_id):
     data = request.json
-
-    # TODO: Assign agents & projects if exists
-
     return catch_exception_wrapper(edit_model_by_id, department_id, data, Department)
 
 
 @app.route('/v1/abnormalities/<int:abnormality_id>/', methods=['POST'])
 def edit_abnormality(abnormality_id):
     data = request.json
-
-    # TODO: Assign tile, clocks, agents, egos if exists
-
     return catch_exception_wrapper(edit_model_by_id, abnormality_id, data, Abnormality)
 
 
 @app.route('/v1/agents/<int:agent_id>/', methods=['POST'])
 def edit_agent(agent_id):
     data = request.json
-
-    # Assign department if exists
-    relationships = None
-    if 'department_id' in data:
-        department_id = data.get('department_id')
-        if not (department := db.session.query(Department).get(department_id)):
-            return failure_response(f'Department not found for id: {department_id}')
-        relationships = {'department': department}
-
-    # TODO: Assign tile, abnormality, abilities, clocks, harms if exists
-
-    return catch_exception_wrapper(edit_model_by_id, agent_id, data, Agent, relationships=relationships)
+    return catch_exception_wrapper(edit_model_by_id, agent_id, data, Agent)
 
 
 @app.route('/v1/projects/<int:project_id>/', methods=['POST'])
 def edit_project(project_id):
     data = request.json
-
-    # Assign department if exists
-    relationships = None
-    if 'department_id' in data:
-        department_id = data.get('department_id')
-        if not (department := db.session.query(Department).get(department_id)):
-            return failure_response(f'Department not found for id: {department_id}')
-        relationships = {'department': department}
-
-    return catch_exception_wrapper(edit_model_by_id, project_id, data, Project, relationships=relationships)
+    return catch_exception_wrapper(edit_model_by_id, project_id, data, Project)
 
 
 @app.route('/v1/abilities/<int:ability_id>/', methods=['POST'])
 def edit_ability(ability_id):
     data = request.json
-
-    # TODO: Assign agents if exists
-
     return catch_exception_wrapper(edit_model_by_id, ability_id, data, Ability)
 
 
 @app.route('/v1/harms/<int:harm_id>/', methods=['POST'])
 def edit_harm(harm_id):
     data = request.json
-
-    # Assign agent if exists
-    relationships = None
-    if 'agent_id' in data:
-        agent_id = data.get('agent_id')
-        if not (agent := db.session.query(Agent).get(agent_id)):
-            return failure_response(f'Agent not found for id: {agent_id}')
-        relationships = {'agent': agent}
-
-    return catch_exception_wrapper(edit_model_by_id, harm_id, data, Harm, relationships=relationships)
+    return catch_exception_wrapper(edit_model_by_id, harm_id, data, Harm)
 
 
 @app.route('/v1/egos/<int:ego_id>/', methods=['POST'])
 def edit_ego(ego_id):
     data = request.json
-
-    # Assign abnormality if exists
-    relationships = None
-    if 'abnormality_id' in data:
-        abnormality_id = data.get('abnormality_id')
-        if not (abnormality := db.session.query(Abnormality).get(abnormality_id)):
-            return failure_response(f'Abnormality not found for id: {abnormality_id}')
-        relationships = {'abnormality': abnormality}
-
-    # TODO: Assign agents if exists
-
-    return catch_exception_wrapper(edit_model_by_id, ego_id, data, Ego, relationships=relationships)
+    return catch_exception_wrapper(edit_model_by_id, ego_id, data, Ego)
 
 
 @app.route('/v1/clocks/<int:clock_id>/', methods=['POST'])
 def edit_clock(clock_id):
     data = request.json
-
-    # TODO: Assign agents, abnormalities if exists
-
     return catch_exception_wrapper(edit_model_by_id, clock_id, data, Clock)
 
 
 @app.route('/v1/tiles/<int:tile_id>/', methods=['POST'])
 def edit_tile(tile_id):
     data = request.json
-
-    # TODO: Assign abnormalities, agents if exists
-
     return catch_exception_wrapper(edit_model_by_id, tile_id, data, Tile)
 
 
@@ -516,7 +485,7 @@ def edit_tile(tile_id):
 def facility_init():
     with app.app_context():
         try:
-            facility = db.session.query(Facility).all()
+            facility = Facility.query.all()
             if len(facility) < 1:
                 facility = Facility()
                 db.session.add(facility)
@@ -529,9 +498,9 @@ def facility_init():
 def departments_init():
     with app.app_context():
         try:
-            deps = db.session.query(Department).all()
+            deps = Department.query.all()
             if len(deps) != 5:
-                db.session.query(Department).delete()
+                Department.query.delete()
 
                 for name, dep_id in departments.items():
                     new_dep = Department(id=dep_id, name=name)
@@ -546,9 +515,9 @@ def departments_init():
 def tiles_init():
     with app.app_context():
         try:
-            tiles = db.session.query(Tile).all()
+            tiles = Tile.query.all()
             if len(tiles) != 448:
-                db.session.query(Tile).delete()
+                Tile.query.delete()
 
                 for i in range(16):
                     containment_list = containment_tiles[str(i)] if str(i) in containment_tiles else []
