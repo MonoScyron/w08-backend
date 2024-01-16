@@ -3,14 +3,12 @@ version: '3'
 services:
   postgres:
     image: postgres:latest
-    environment:
-      POSTGRES_DB: db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env
     networks:
       - postgres_network
   web:

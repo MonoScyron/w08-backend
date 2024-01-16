@@ -49,7 +49,7 @@ with open(data_json_path, 'r') as file:
     file_data = json.load(file)
     departments = file_data.get('departments')
     containment_tiles = file_data.get('containment_tiles')
-    assign_fields = file_data.get('assign_fields')
+    fields_to_column = file_data.get('fields_to_column')
     field_to_tablename = file_data.get('field_to_tablename')
 
 
@@ -110,17 +110,12 @@ def update_relationships(data, model_instance, model: db.Model):
     :param model: Model representing the table in the database
     :return: None
     """
-    model_assign_fields = assign_fields[model.__tablename__]
+    model_assign_fields = fields_to_column[model.__tablename__]
     for k in data.keys():
         if k in model_assign_fields.keys():
             relationship_id = data.get(k)
 
-            logging.debug((type(relationship_id) is list))
             if not type(relationship_id) is list:
-
-                logging.debug(f'{field_to_tablename[k]}')
-                logging.debug(f'{tablename_to_model[field_to_tablename[k]]}')
-
                 if not (relationship := tablename_to_model[field_to_tablename[k]].query.get(relationship_id)):
                     return failure_response(
                         f'Row not found in table \'{field_to_tablename[k]}\' for id={relationship_id}'
@@ -129,14 +124,9 @@ def update_relationships(data, model_instance, model: db.Model):
             else:
                 relationship_list = []
                 for r_id in relationship_id:
-                    logging.debug(f'{field_to_tablename[k]}')
-                    logging.debug(f'{tablename_to_model[field_to_tablename[k]]}')
-
                     if not (relationship := tablename_to_model[field_to_tablename[k]].query.get(r_id)):
                         return failure_response(f'Row not found in table \'{field_to_tablename[k]}\' for id={r_id}')
                     relationship_list.append(relationship)
-
-                logging.debug(f'{relationship_list}')
                 getattr(model_instance, model_assign_fields[k]).append(relationship_list)
 
 

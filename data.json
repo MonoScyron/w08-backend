@@ -43,7 +43,7 @@
     "tile_id": "tiles",
     "tile_ids": "tiles"
   },
-  "assign_fields": {
+  "fields_to_column": {
     "departments": {
       "agent_ids": "agents",
       "project_ids": "projects"
