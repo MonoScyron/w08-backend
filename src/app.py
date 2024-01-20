@@ -127,7 +127,7 @@ def update_relationships(data, model_instance, model: db.Model):
                     if not (relationship := tablename_to_model[field_to_tablename[k]].query.get(r_id)):
                         return failure_response(f'Row not found in table \'{field_to_tablename[k]}\' for id={r_id}')
                     relationship_list.append(relationship)
-                getattr(model_instance, model_assign_fields[k]).append(relationship_list)
+                setattr(model_instance, model_assign_fields[k], relationship_list)
 
 
 def get_all_from_model(model: db.Model):
